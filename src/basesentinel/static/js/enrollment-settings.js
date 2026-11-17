@@ -32,12 +32,7 @@ async function load() {
     }
     try {
         const data = await api("/server/enrollment");
-        document.getElementById("server-id").textContent = data.server_id;
         document.getElementById("enrollment-mode").value = data.enrollment_mode;
-        if (data.initial_server_secret) {
-            document.getElementById("server-secret").textContent = data.initial_server_secret;
-            document.getElementById("secret-notice").textContent = "Copy and store this code now. It cannot be retrieved later.";
-        }
         await loadInvitations();
         await loadEnrollmentRequests();
     } catch (error) {
@@ -45,31 +40,15 @@ async function load() {
     }
 }
 
-document.getElementById("rotate-secret").addEventListener("click", async () => {
-    if (!window.confirm("Rotating the access code will prevent new devices using the old code from enrolling. Continue?")) return;
-    try {
-        const data = await api("/server/enrollment/rotate-secret", {method: "POST"});
-        document.getElementById("server-id").textContent = data.server_id;
-        document.getElementById("server-secret").textContent = data.server_secret;
-        document.getElementById("secret-notice").textContent = "New access code. Copy and store it now; it cannot be retrieved later.";
-        showMessage("Server access code rotated.");
-    } catch (error) {
-        showMessage(error.message, true);
-    }
-});
-
 document.getElementById("save-settings").addEventListener("click", async () => {
-    const password = document.getElementById("connection-password").value;
     try {
-        const data = await api("/server/enrollment", {
+        await api("/server/enrollment", {
             method: "PUT",
             body: JSON.stringify({
                 enrollment_mode: document.getElementById("enrollment-mode").value,
-                connection_password: password,
             }),
         });
-        document.getElementById("connection-password").value = "";
-        showMessage("Enrollment settings saved. Password required: " + (data.connection_password_required ? "yes" : "no") + ".");
+        showMessage("Enrollment policy saved.");
     } catch (error) {
         showMessage(error.message, true);
     }
