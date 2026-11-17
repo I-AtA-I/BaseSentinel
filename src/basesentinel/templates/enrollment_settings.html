@@ -27,6 +27,26 @@
                 <button id="rotate-secret" class="secondary-button" type="button" style="margin-top:12px">Generate / rotate access code</button>
             </section>
             <section class="panel">
+                <div class="panel-heading"><div><h2>Temporary invitations</h2><p class="muted">Create a single-use link for a new Windows or Linux agent. The link is shown only once.</p></div></div>
+                <label for="invitation-ttl">Invitation lifetime</label>
+                <select id="invitation-ttl">
+                    <option value="15">15 minutes</option>
+                    <option value="60" selected>1 hour</option>
+                    <option value="360">6 hours</option>
+                    <option value="1440">24 hours</option>
+                </select>
+                <button id="create-invitation" class="secondary-button" type="button" style="margin-top:14px">Create invitation</button>
+                <div id="invitation-result" hidden style="margin-top:16px">
+                    <p class="muted">Copy this link and share it with the device owner. Treat it like a temporary password.</p>
+                    <input id="invitation-link" type="text" readonly autocomplete="off">
+                    <button id="copy-invitation" class="secondary-button" type="button" style="margin-top:10px">Copy invitation link</button>
+                </div>
+                <div style="margin-top:22px">
+                    <h3>Recent invitations</h3>
+                    <div id="invitations-list" class="muted">Loading invitations...</div>
+                </div>
+            </section>
+            <section class="panel">
                 <div class="panel-heading"><div><h2>Connection policy</h2><p class="muted">Control whether new devices can enroll.</p></div></div>
                 <label for="enrollment-mode">New agent enrollment</label>
                 <select id="enrollment-mode"><option value="automatic">Automatic — valid credentials connect immediately</option><option value="disabled">Disabled — reject new devices</option></select>
