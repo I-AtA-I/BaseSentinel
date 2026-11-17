@@ -13,16 +13,20 @@ _EVENT_MAP = {
     4672: ("authentication", "privilege.special_assignment", 5),
     4720: ("account", "account.created", 7),
 }
+_ALLOWED_EVENT_FIELDS = {
+    "TargetUserName", "SubjectUserName", "IpAddress", "WorkstationName",
+    "LogonType", "ProcessName", "TargetDomainName", "SubjectDomainName",
+    "Status", "SubStatus", "PrivilegeList",
+}
 
 # Fixed query and output fields: no user-provided text is interpolated into PowerShell.
 _POWERSHELL = r"""
-$events = Get-WinEvent -FilterHashtable @{ LogName = 'Security'; Id = @(4624,4625,4672,4720); StartTime = (Get-Date).AddMinutes(-10) } -MaxEvents 100 -ErrorAction Stop
+$events = @(Get-WinEvent -FilterHashtable @{ LogName = 'Security'; Id = @(4624,4625,4672,4720); StartTime = (Get-Date).AddMinutes(-10) } -MaxEvents 100 -ErrorAction SilentlyContinue)
 $result = @($events | ForEach-Object {
     [pscustomobject]@{
         Id = $_.Id
         RecordId = $_.RecordId
         TimeCreated = $_.TimeCreated.ToUniversalTime().ToString('o')
-        ProviderName = $_.ProviderName
         MachineName = $_.MachineName
         Message = $_.Message
         Xml = $_.ToXml()
@@ -37,7 +41,7 @@ def _event_data(xml_text: str) -> dict:
     values = {}
     for item in root.findall(".//{*}EventData/{*}Data"):
         name = item.attrib.get("Name")
-        if name:
+        if name in _ALLOWED_EVENT_FIELDS and len(values) < 20:
             values[name] = (item.text or "")[:512]
     return values
 
