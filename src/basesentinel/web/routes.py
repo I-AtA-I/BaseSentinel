@@ -23,6 +23,11 @@ def enrollment_settings():
     return render_template("enrollment_settings.html")
 
 
+@web.get("/agent-invite")
+def agent_invite():
+    return render_template("agent_invite.html")
+
+
 @web.get("/logout")
 def logout():
     return redirect(url_for("web.login"))
