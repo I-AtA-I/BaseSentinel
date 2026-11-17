@@ -110,8 +110,9 @@ Run the same checks from PowerShell:
 
 ```powershell
 basesentinel-agent diagnostics
-basesentinel-agent collect --batch-size 50
-basesentinel-agent run --interval 60 --batch-size 50
+basesentinel-agent collect --batch-size 500
+basesentinel-agent drain --batch-size 500
+basesentinel-agent run --interval 60 --batch-size 500
 ```
 
 Diagnostics checks the authenticated server connection, local pending queue, checkpoint, and whether the current Windows user can read the Security event log. It does not send events or change the checkpoint. **Collect now** (or the `collect` command) reads new events, persists them and the checkpoint locally, then attempts to deliver up to 500 queued events by default. **Drain backlog** (or the `drain` command) sends only events already stored in the local SQLite queue; it does not read the Windows event log or change the checkpoint. The GUI lets the operator choose a delivery limit of 50, 100, 250, or 500. Continuous mode repeats collection and delivery, and sends an authenticated heartbeat every cycle. A large pending count is a backlog, not a delivery confirmation; it decreases as the server acknowledges queued events.
