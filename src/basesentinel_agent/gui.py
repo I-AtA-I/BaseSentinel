@@ -15,20 +15,38 @@ class AgentWindow:
     def __init__(self, root):
         self.root = root
         self.root.title("BaseSentinel Agent")
-        self.root.geometry("560x360")
-        self.root.minsize(500, 330)
+        self.root.geometry("600x500")
+        self.root.minsize(540, 460)
         self.process = None
 
         frame = ttk.Frame(root, padding=22)
         frame.pack(fill="both", expand=True)
         ttk.Label(frame, text="BASESENTINEL", font=("Segoe UI", 18, "bold")).pack(anchor="w")
-        ttk.Label(frame, text="Connect this Windows device to your security server.").pack(anchor="w", pady=(2, 18))
+        ttk.Label(frame, text="Connect this Windows device to your security server.").pack(anchor="w", pady=(2, 14))
 
-        self.invitation = self._field(frame, "Invitation link")
+        notebook = ttk.Notebook(frame)
+        notebook.pack(fill="x", expand=False)
+        link_tab = ttk.Frame(notebook, padding=14)
+        code_tab = ttk.Frame(notebook, padding=14)
+        notebook.add(link_tab, text="Invitation link")
+        notebook.add(code_tab, text="Invitation code")
+
+        ttk.Label(link_tab, text="Paste the complete invitation link").pack(anchor="w")
+        self.invitation = ttk.Entry(link_tab)
+        self.invitation.pack(fill="x", pady=(6, 8))
+        ttk.Label(link_tab, text="The link includes the server address and one-time invitation.").pack(anchor="w")
+
+        ttk.Label(code_tab, text="Server URL").pack(anchor="w")
+        self.server_url = ttk.Entry(code_tab)
+        self.server_url.pack(fill="x", pady=(4, 10))
+        ttk.Label(code_tab, text="Invitation code").pack(anchor="w")
+        self.invitation_code = ttk.Entry(code_tab, font=("Consolas", 13))
+        self.invitation_code.pack(fill="x", pady=(4, 8))
+        ttk.Label(code_tab, text="Enter the code shown by the administrator.").pack(anchor="w")
 
         actions = ttk.Frame(frame)
         actions.pack(fill="x", pady=(16, 8))
-        self.connect_button = ttk.Button(actions, text="Connect device", command=self.connect)
+        self.connect_button = ttk.Button(actions, text="Connect device", command=lambda: self.connect(notebook.index("current")))
         self.connect_button.pack(side="left")
         self.start_button = ttk.Button(actions, text="Start monitoring", command=self.start, state="disabled")
         self.start_button.pack(side="left", padx=8)
@@ -36,38 +54,44 @@ class AgentWindow:
         self.stop_button.pack(side="left")
 
         self.status = tk.StringVar(value="Not connected")
-        ttk.Label(frame, textvariable=self.status, wraplength=460).pack(anchor="w", pady=(12, 0))
-        ttk.Label(frame, text="Credentials are protected with Windows DPAPI for this Windows user.",
-                  wraplength=460).pack(anchor="w", side="bottom", pady=(18, 0))
+        ttk.Label(frame, textvariable=self.status, wraplength=500).pack(anchor="w", pady=(12, 0))
+        ttk.Label(frame, text="Agent credentials are protected with Windows DPAPI for this Windows user.",
+                  wraplength=500).pack(anchor="w", side="bottom", pady=(18, 0))
         self.root.protocol("WM_DELETE_WINDOW", self.close)
 
-    def _field(self, parent, label, default="", show=None):
-        ttk.Label(parent, text=label).pack(anchor="w")
-        entry = ttk.Entry(parent, show=show)
-        entry.pack(fill="x", pady=(3, 10))
-        if default:
-            entry.insert(0, default)
-        return entry
-
-    def connect(self):
-        invitation_link = self.invitation.get().strip()
-        if not invitation_link:
-            messagebox.showerror("Missing information", "Paste the complete invitation link.")
+    def connect(self, tab_index):
+        try:
+            if tab_index == 0:
+                server, invitation_token = BaseSentinelClient.parse_invitation_link(self.invitation.get().strip())
+                invitation_code = None
+            else:
+                server = self.server_url.get().strip()
+                BaseSentinelClient(server)
+                invitation_token = None
+                invitation_code = self.invitation_code.get().strip()
+                if not invitation_code:
+                    raise ValueError("Enter the invitation code.")
+        except ValueError as exc:
+            messagebox.showerror("Invalid invitation", str(exc))
             return
+
         self.connect_button.configure(state="disabled")
         self.status.set("Connecting...")
         self.root.update_idletasks()
         try:
-            server, invitation_token = BaseSentinelClient.parse_invitation_link(invitation_link)
             client = BaseSentinelClient(server)
             result = client.enroll_with_invitation(
-                invitation_token, socket.gethostname(),
-                platform.platform()[:80], platform.machine()[:32],
+                socket.gethostname(),
+                platform.platform()[:80],
+                platform.machine()[:32],
+                invitation_token=invitation_token,
+                invitation_code=invitation_code,
             )
             AgentConfigStore().save(server, result["token"], result["agent_id"])
             self.status.set(f"Connected. Agent ID: {result['agent_id']}")
             self.start_button.configure(state="normal")
             self.invitation.delete(0, "end")
+            self.invitation_code.delete(0, "end")
         except (ValueError, RuntimeError, ConnectionError, AgentApiError, OSError) as exc:
             messagebox.showerror("Connection failed", str(exc))
             self.status.set("Connection failed.")
