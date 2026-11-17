@@ -20,37 +20,58 @@ def _blob(data: bytes):
     return blob, buffer
 
 
-def _release(blob: _DataBlob) -> None:
+def _api():
+    crypt32 = ctypes.WinDLL("crypt32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    crypt32.CryptProtectData.argtypes = [
+        ctypes.POINTER(_DataBlob), wintypes.LPCWSTR, ctypes.POINTER(_DataBlob),
+        ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(_DataBlob),
+    ]
+    crypt32.CryptProtectData.restype = wintypes.BOOL
+    crypt32.CryptUnprotectData.argtypes = [
+        ctypes.POINTER(_DataBlob), ctypes.POINTER(wintypes.LPWSTR),
+        ctypes.POINTER(_DataBlob), ctypes.c_void_p, ctypes.c_void_p,
+        wintypes.DWORD, ctypes.POINTER(_DataBlob),
+    ]
+    crypt32.CryptUnprotectData.restype = wintypes.BOOL
+    kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+    kernel32.LocalFree.restype = ctypes.c_void_p
+    return crypt32, kernel32
+
+
+def _release(blob: _DataBlob, kernel32) -> None:
     if blob.pbData:
-        ctypes.windll.kernel32.LocalFree(blob.pbData)
+        kernel32.LocalFree(ctypes.cast(blob.pbData, ctypes.c_void_p))
 
 
 def protect_secret(secret: str) -> bytes:
     """Protect a secret for the current Windows user with DPAPI."""
     _require_windows()
+    crypt32, kernel32 = _api()
     source, source_buffer = _blob(secret.encode("utf-8"))
     destination = _DataBlob()
-    if not ctypes.windll.crypt32.CryptProtectData(
+    if not crypt32.CryptProtectData(
         ctypes.byref(source), "BaseSentinel agent credential", None, None, None, 0,
         ctypes.byref(destination),
     ):
-        raise ctypes.WinError()
+        raise ctypes.WinError(ctypes.get_last_error())
     try:
         return ctypes.string_at(destination.pbData, destination.cbData)
     finally:
-        _release(destination)
+        _release(destination, kernel32)
 
 
 def unprotect_secret(encrypted: bytes) -> str:
     """Decrypt a DPAPI-protected secret for the current Windows user."""
     _require_windows()
+    crypt32, kernel32 = _api()
     source, source_buffer = _blob(encrypted)
     destination = _DataBlob()
-    if not ctypes.windll.crypt32.CryptUnprotectData(
+    if not crypt32.CryptUnprotectData(
         ctypes.byref(source), None, None, None, None, 0, ctypes.byref(destination),
     ):
-        raise ctypes.WinError()
+        raise ctypes.WinError(ctypes.get_last_error())
     try:
         return ctypes.string_at(destination.pbData, destination.cbData).decode("utf-8")
     finally:
-        _release(destination)
+        _release(destination, kernel32)
