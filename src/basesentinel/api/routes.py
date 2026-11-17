@@ -19,7 +19,7 @@ from basesentinel import db
 from basesentinel.api import api
 from basesentinel.api.decorators import require_agent, require_user
 from basesentinel.api.permissions import require_role
-from basesentinel.models import Agent, AgentCredential
+from basesentinel.models import Agent, AgentCredential, AgentInvitation
 from basesentinel.services.credentials import (
     AgentCredentialService,
     AgentUnavailableError,
@@ -28,6 +28,7 @@ from basesentinel.services.sessions import UserSessionService
 from basesentinel.services.users import UserService
 from basesentinel.services.pairings import PairingService
 from basesentinel.services.server_enrollment import ServerEnrollmentService, ServerAccessError
+from basesentinel.services.agent_invitations import AgentInvitationService, InvalidInvitationError
 from basesentinel.services.enrollment import (EnrollmentService, InvalidPairingCodeError, AssetAlreadyEnrolledError, EnrollmentError)
 from werkzeug.exceptions import RequestEntityTooLarge
 
@@ -1322,6 +1323,133 @@ def enroll_agent_with_server_access():
         return _error_response("invalid_enrollment_request", str(exc), 400)
     except RuntimeError:
         return _error_response("enrollment_not_configured", "Server enrollment is not configured.", 503)
+    response = jsonify({
+        "agent_id": str(result.agent.id),
+        "asset_id": str(result.asset.id),
+        "token": result.token,
+        "token_type": "Bearer",
+        "expires_at": _serialize_datetime(result.credential.expires_at),
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response, 201
+
+
+# ---------------------------------------------------------------------
+# Temporary agent invitations
+# ---------------------------------------------------------------------
+
+@api.get("/server/enrollment/invitations")
+@require_user
+@require_role("admin")
+def list_agent_invitations():
+    now = datetime.utcnow()
+    records = AgentInvitationService.list_recent()
+    response = jsonify({
+        "items": [{
+            "id": str(item.id),
+            "created_at": _serialize_datetime(item.created_at),
+            "expires_at": _serialize_datetime(item.expires_at),
+            "consumed_at": _serialize_datetime(item.consumed_at),
+            "revoked_at": _serialize_datetime(item.revoked_at),
+            "status": (
+                "used" if item.consumed_at is not None
+                else "revoked" if item.revoked_at is not None
+                else "expired" if item.expires_at <= now
+                else "active"
+            ),
+        } for item in records],
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response, 200
+
+
+@api.post("/server/enrollment/invitations")
+@require_user
+@require_role("admin")
+def create_agent_invitation():
+    data = request.get_json(silent=True) if request.data else {}
+    if not isinstance(data, dict) or set(data) - {"ttl_minutes"}:
+        return _invalid_request_response()
+    ttl_minutes = data.get("ttl_minutes", 60)
+    if type(ttl_minutes) is not int or not 5 <= ttl_minutes <= 1440:
+        return _error_response(
+            "invalid_invitation_lifetime",
+            "Invitation lifetime must be between 5 minutes and 24 hours.",
+            400,
+        )
+    try:
+        record, token = AgentInvitationService.create(
+            g.current_user.id,
+            timedelta(minutes=ttl_minutes),
+        )
+    except PermissionError:
+        return _error_response("forbidden", "Administrator access is required.", 403)
+    response = jsonify({
+        "id": str(record.id),
+        "invitation_token": token,
+        "created_at": _serialize_datetime(record.created_at),
+        "expires_at": _serialize_datetime(record.expires_at),
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response, 201
+
+
+@api.post("/server/enrollment/invitations/<invitation_id>/revoke")
+@require_user
+@require_role("admin")
+def revoke_agent_invitation(invitation_id):
+    parsed_id = _parse_uuid(invitation_id)
+    if parsed_id is None:
+        return _error_response("invalid_invitation_id", "Invalid invitation ID.", 400)
+    result = AgentInvitationService.revoke(parsed_id)
+    if result is None:
+        return _error_response("invitation_not_found", "Invitation not found.", 404)
+    return jsonify({"id": str(parsed_id), "revoked": bool(result)}), 200
+
+
+@api.post("/agents/enroll-invitation")
+def enroll_agent_with_invitation():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _invalid_request_response()
+    allowed = {
+        "invitation_token", "hostname", "platform", "agent_version",
+        "platform_version", "architecture",
+    }
+    if set(data) - allowed:
+        return _error_response(
+            "invalid_enrollment_request",
+            "Enrollment request contains unsupported fields.",
+            400,
+        )
+    try:
+        result = AgentInvitationService.enroll(
+            token=data.get("invitation_token"),
+            hostname=data.get("hostname"),
+            platform=data.get("platform"),
+            agent_version=data.get("agent_version"),
+            platform_version=data.get("platform_version"),
+            architecture=data.get("architecture"),
+        )
+    except InvalidInvitationError:
+        return _error_response(
+            "invalid_invitation",
+            "Invitation is invalid, expired, already used, revoked, or enrollment is disabled.",
+            401,
+        )
+    except AssetAlreadyEnrolledError:
+        return _error_response(
+            "asset_already_enrolled",
+            "Target asset already has an active agent.",
+            409,
+        )
+    except EnrollmentError as exc:
+        return _error_response("enrollment_unavailable", str(exc), 409)
+    except ValueError as exc:
+        return _error_response("invalid_enrollment_request", str(exc), 400)
+    except RuntimeError:
+        return _error_response("enrollment_not_configured", "Agent enrollment is not configured.", 503)
+
     response = jsonify({
         "agent_id": str(result.agent.id),
         "asset_id": str(result.asset.id),
