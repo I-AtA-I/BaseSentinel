@@ -83,7 +83,7 @@ def test_security_event_collector_normalizes_windows_events(monkeypatch):
     assert event["event_data"]["TargetUserName"] == "sample"
     assert "IgnoredField" not in event["event_data"]
     assert event["event_uid"] == str(uuid.uuid5(
-        uuid.NAMESPACE_URL, "windows-security:WORKSTATION:91"
+        uuid.NAMESPACE_URL, "windows-security:WORKSTATION:91:4625:2026-11-17T10:00:00.0000000Z"
     ))
 
 
