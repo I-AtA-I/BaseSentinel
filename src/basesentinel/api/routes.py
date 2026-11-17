@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from basesentinel.services.analytics import AnalyticsService
 from basesentinel.models import Alert
 
@@ -26,6 +26,8 @@ from basesentinel.services.credentials import (
 )
 from basesentinel.services.sessions import UserSessionService
 from basesentinel.services.users import UserService
+from basesentinel.services.pairings import PairingService
+from basesentinel.services.enrollment import (EnrollmentService, InvalidPairingCodeError, AssetAlreadyEnrolledError, EnrollmentError)
 from werkzeug.exceptions import RequestEntityTooLarge
 
 MAX_EVENT_REQUEST_BYTES = 32 * 1024
@@ -340,6 +342,80 @@ def get_agent(agent_id):
 
     return response, 200
 
+
+# ---------------------------------------------------------------------
+# Agent enrollment
+# ---------------------------------------------------------------------
+
+@api.post("/pairing-codes")
+@require_user
+@require_role("admin")
+def create_pairing_code():
+    data = request.get_json(silent=True) if request.data else {}
+    if not isinstance(data, dict):
+        return _invalid_request_response()
+
+    ttl_minutes = data.get("ttl_minutes", 10)
+    target_asset_id = data.get("target_asset_id")
+    if type(ttl_minutes) is not int or not 1 <= ttl_minutes <= 30:
+        return _error_response("invalid_pairing_code_lifetime", "Pairing code lifetime must be between 1 and 30 minutes.", 400)
+    if target_asset_id is not None:
+        target_asset_id = _parse_uuid(target_asset_id)
+        if target_asset_id is None:
+            return _error_response("invalid_asset_id", "Invalid target asset ID.", 400)
+    try:
+        record, code = PairingService.create_code(g.current_user.id, target_asset_id, timedelta(minutes=ttl_minutes))
+    except ValueError as exc:
+        return _error_response("invalid_pairing_code_request", str(exc), 400)
+    except PermissionError:
+        return _error_response("forbidden", "Administrator access is required.", 403)
+    response = jsonify({
+        "id": str(record.id),
+        "code": code,
+        "created_at": _serialize_datetime(record.created_at),
+        "expires_at": _serialize_datetime(record.expires_at),
+        "target_asset_id": str(record.target_asset_id) if record.target_asset_id else None,
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response, 201
+
+
+@api.post("/agents/enroll")
+def enroll_agent():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _invalid_request_response()
+    allowed = {"pairing_code", "hostname", "platform", "agent_version", "platform_version", "architecture"}
+    if set(data) - allowed:
+        return _error_response("invalid_enrollment_request", "Enrollment request contains unsupported fields.", 400)
+    try:
+        result = EnrollmentService.enroll(
+            pairing_code=data.get("pairing_code"),
+            hostname=data.get("hostname"),
+            platform=data.get("platform"),
+            agent_version=data.get("agent_version"),
+            platform_version=data.get("platform_version"),
+            architecture=data.get("architecture"),
+        )
+    except InvalidPairingCodeError:
+        return _error_response("invalid_pairing_code", "Pairing code is invalid or unavailable.", 401)
+    except AssetAlreadyEnrolledError:
+        return _error_response("asset_already_enrolled", "Target asset already has an active agent.", 409)
+    except EnrollmentError as exc:
+        return _error_response("enrollment_unavailable", str(exc), 409)
+    except ValueError as exc:
+        return _error_response("invalid_enrollment_request", str(exc), 400)
+    except RuntimeError:
+        return _error_response("enrollment_not_configured", "Agent enrollment is not configured.", 503)
+    response = jsonify({
+        "agent_id": str(result.agent.id),
+        "asset_id": str(result.asset.id),
+        "token": result.token,
+        "token_type": "Bearer",
+        "expires_at": _serialize_datetime(result.credential.expires_at),
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response, 201
 
 # ---------------------------------------------------------------------
 # Agent administration
