@@ -371,8 +371,6 @@ def create_pairing_code():
         return _error_response("invalid_pairing_code_request", str(exc), 400)
     except PermissionError:
         return _error_response("forbidden", "Administrator access is required.", 403)
-    except RuntimeError as exc:
-        return _error_response("enrollment_disabled", str(exc), 409)
     response = jsonify({
         "id": str(record.id),
         "code": code,
@@ -1386,6 +1384,8 @@ def create_agent_invitation():
         )
     except PermissionError:
         return _error_response("forbidden", "Administrator access is required.", 403)
+    except RuntimeError as exc:
+        return _error_response("enrollment_disabled", str(exc), 409)
     response = jsonify({
         "id": str(record.id),
         "invitation_token": token,
