@@ -18,6 +18,7 @@ def upgrade():
         "agent_invitations",
         sa.Column("id", sa.Uuid(native_uuid=False), nullable=False),
         sa.Column("token_hash", sa.String(length=64), nullable=False),
+        sa.Column("code_hash", sa.String(length=64), nullable=False),
         sa.Column("created_by_user_id", sa.String(length=32), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("expires_at", sa.DateTime(), nullable=False),
@@ -31,6 +32,7 @@ def upgrade():
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_agent_invitations")),
         sa.UniqueConstraint("token_hash", name=op.f("uq_agent_invitations_token_hash")),
+        sa.UniqueConstraint("code_hash", name=op.f("uq_agent_invitations_code_hash")),
     )
     op.create_index(
         "ix_agent_invitations_expires_at",
