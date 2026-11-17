@@ -42,6 +42,9 @@ class AgentInvitationService:
         user = db.session.get(User, created_by_user_id)
         if user is None or not user.is_active or user.role != "admin":
             raise PermissionError("Administrator access is required.")
+        settings = db.session.get(ServerSettings, 1)
+        if settings is None or settings.enrollment_mode != "automatic":
+            raise RuntimeError("New agent enrollment is disabled.")
 
         token = secrets.token_urlsafe(32)
         record = AgentInvitation(
