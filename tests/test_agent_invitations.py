@@ -77,11 +77,14 @@ def test_invitation_token_is_only_returned_once_and_only_hash_is_stored(client, 
     created = _create_invitation(client, admin)
 
     assert created["invitation_token"]
+    assert created["invitation_code"]
     assert created["expires_at"]
     with app.app_context():
         record = db.session.get(AgentInvitation, UUID(created["id"]))
         assert record.token_hash != created["invitation_token"]
+        assert record.code_hash != created["invitation_code"].replace("-", "")
         assert len(record.token_hash) == 64
+        assert len(record.code_hash) == 64
 
     listed = client.get("/api/v1/server/enrollment/invitations", headers=admin)
     assert listed.status_code == 200
