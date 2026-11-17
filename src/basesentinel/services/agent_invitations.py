@@ -39,7 +39,7 @@ class AgentInvitationService:
         if not isinstance(code, str):
             raise InvalidInvitationError()
         normalized = code.replace("-", "").replace(" ", "").upper()
-        if len(normalized) != 16 or any(char not in "23456789ABCDEFGHJKMNPQRSTUVWXYZ" for char in normalized):
+        if len(normalized) != 16 or any(char not in "23456789ABCDEFGHJKMNPQRSTVWXYZ" for char in normalized):
             raise InvalidInvitationError()
         return hmac.new(cls._pepper(), normalized.encode("ascii"), hashlib.sha256).hexdigest()
 
@@ -56,7 +56,7 @@ class AgentInvitationService:
             raise RuntimeError("New agent enrollment is disabled.")
 
         token = secrets.token_urlsafe(32)
-        alphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
+        alphabet = "23456789ABCDEFGHJKMNPQRSTVWXYZ"
         raw_code = "".join(secrets.choice(alphabet) for _ in range(16))
         invitation_code = "-".join(raw_code[index:index + 4] for index in range(0, 16, 4))
         record = AgentInvitation(
