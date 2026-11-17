@@ -72,9 +72,10 @@ class ServerEnrollmentService:
             connection_password = connection_password.strip() or None
         settings, _ = cls.get_or_create_settings()
         settings.enrollment_mode = mode
-        settings.connection_password_hash = (
-            hash_password(connection_password) if connection_password else None
-        )
+        if connection_password is not None:
+            settings.connection_password_hash = (
+                hash_password(connection_password) if connection_password else None
+            )
         settings.updated_at = utcnow_naive()
         db.session.commit()
         return settings
