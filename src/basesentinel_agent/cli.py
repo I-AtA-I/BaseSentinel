@@ -37,16 +37,13 @@ def enroll(args) -> int:
     return 0
 
 
-def _collect_and_send(
+def _deliver_pending(
     client: BaseSentinelClient,
     queue: EventQueue,
     batch_size: int,
     stop_event: threading.Event | None = None,
-) -> tuple[int, int, int, int]:
-    checkpoint = queue.security_checkpoint()
-    discovered, next_checkpoint = collect_security_events(checkpoint)
-    queue.add_batch_and_checkpoint(discovered, next_checkpoint)
-
+) -> tuple[int, int]:
+    """Send a bounded number of queued events and acknowledge successful deliveries."""
     sent = 0
     for event in queue.pending(limit=batch_size):
         if stop_event is not None and stop_event.is_set():
@@ -61,7 +58,25 @@ def _collect_and_send(
         queue.acknowledge(event["event_uid"])
         sent += 1
 
-    return len(discovered), sent, len(queue), next_checkpoint
+    return sent, len(queue)
+
+
+def _collect_and_send(
+    client: BaseSentinelClient,
+    queue: EventQueue,
+    batch_size: int,
+    stop_event: threading.Event | None = None,
+) -> tuple[int, int, int, int]:
+    checkpoint = queue.security_checkpoint()
+    discovered, next_checkpoint = collect_security_events(checkpoint)
+    queue.add_batch_and_checkpoint(discovered, next_checkpoint)
+    sent, pending = _deliver_pending(
+        client,
+        queue,
+        batch_size,
+        stop_event=stop_event,
+    )
+    return len(discovered), sent, pending, next_checkpoint
 
 
 def collect(args) -> int:
@@ -76,6 +91,19 @@ def collect(args) -> int:
         f"Collected {discovered} event(s); delivered {sent}; "
         f"pending {pending}; Security log checkpoint {checkpoint}."
     )
+    return 0
+
+
+def drain(args) -> int:
+    """Deliver already queued events without reading the Windows event log."""
+    client = _client_from_config()
+    queue = _queue()
+    sent, pending = _deliver_pending(
+        client,
+        queue,
+        args.batch_size,
+    )
+    print(f"Delivered {sent} queued event(s); pending {pending}.")
     return 0
 
 
@@ -250,6 +278,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     collect_parser.add_argument("--batch-size", type=_batch_size, default=500)
     collect_parser.set_defaults(handler=collect)
+
+    drain_parser = commands.add_parser(
+        "drain",
+        help="Deliver queued events without collecting new Windows events.",
+    )
+    drain_parser.add_argument("--batch-size", type=_batch_size, default=500)
+    drain_parser.set_defaults(handler=drain)
 
     diagnostics_parser = commands.add_parser(
         "diagnostics",
