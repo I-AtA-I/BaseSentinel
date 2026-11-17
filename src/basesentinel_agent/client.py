@@ -15,7 +15,8 @@ class AgentApiError(RuntimeError):
 class BaseSentinelClient:
     def __init__(self, base_url: str, token: str | None = None, timeout: float = 10.0):
         parsed = urlsplit(base_url)
-        if parsed.scheme != "https" and parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
+        local_hosts = {"localhost", "127.0.0.1", "::1"}
+        if parsed.scheme != "https" and not (parsed.scheme == "http" and parsed.hostname in local_hosts):
             raise ValueError("The BaseSentinel server URL must use HTTPS.")
         if not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ValueError("Invalid BaseSentinel server URL.")
@@ -23,9 +24,12 @@ class BaseSentinelClient:
         self.token = token
         self.timeout = timeout
 
-    def _request(self, method: str, path: str, payload: dict) -> dict:
-        body = json.dumps(payload, separators=(",", ":"), allow_nan=False).encode("utf-8")
-        headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    def _request(self, method: str, path: str, payload: dict | None = None) -> dict:
+        body = None
+        headers = {"Accept": "application/json"}
+        if payload is not None:
+            body = json.dumps(payload, separators=(",", ":"), allow_nan=False).encode("utf-8")
+            headers["Content-Type"] = "application/json"
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
         request = Request(self.base_url + path, data=body, headers=headers, method=method)
@@ -63,4 +67,4 @@ class BaseSentinelClient:
     def identity(self) -> dict:
         if not self.token:
             raise ValueError("Agent is not enrolled.")
-        return self._request("GET", "/api/v1/agents/me", {})
+        return self._request("GET", "/api/v1/agents/me")
