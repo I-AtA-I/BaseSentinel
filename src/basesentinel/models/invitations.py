@@ -15,7 +15,7 @@ class AgentInvitation(db.Model):
         default=uuid.uuid4,
     )
     token_hash = db.Column(String(64), nullable=False)
-    code_hash = db.Column(String(64), nullable=False)
+    code_hash = db.Column(String(64), nullable=True)
     created_by_user_id = db.Column(
         Uuid(as_uuid=True, native_uuid=False),
         db.ForeignKey(
