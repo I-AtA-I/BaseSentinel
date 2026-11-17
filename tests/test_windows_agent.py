@@ -1,6 +1,5 @@
 import json
 import uuid
-from pathlib import Path
 
 import pytest
 
@@ -49,3 +48,47 @@ def test_event_data_parser_extracts_named_fields():
         "TargetUserName": "sample",
         "IpAddress": "192.0.2.10",
     }
+
+
+def test_security_event_collector_normalizes_windows_events(monkeypatch):
+    import subprocess
+    from basesentinel_agent import windows_eventlog
+
+    xml = """<Event><EventData><Data Name="TargetUserName">sample</Data><Data Name="IpAddress">192.0.2.10</Data><Data Name="IgnoredField">not-collected</Data></EventData></Event>"""
+    output = [{
+        "Id": 4625,
+        "RecordId": 91,
+        "TimeCreated": "2026-11-17T10:00:00.0000000Z",
+        "MachineName": "WORKSTATION",
+        "Message": "A sign-in attempt failed.",
+        "Xml": xml,
+    }]
+
+    def fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, json.dumps(output), "")
+
+    monkeypatch.setattr(windows_eventlog.subprocess, "run", fake_run)
+    events = windows_eventlog.collect_security_events()
+
+    assert len(events) == 1
+    event = events[0]
+    assert event["category"] == "authentication"
+    assert event["event_type"] == "login.failed"
+    assert event["severity"] == 7
+    assert event["event_code"] == "4625"
+    assert event["event_data"]["TargetUserName"] == "sample"
+    assert "IgnoredField" not in event["event_data"]
+    assert event["event_uid"] == str(uuid.uuid5(
+        uuid.NAMESPACE_URL, "windows-security:WORKSTATION:91"
+    ))
+
+
+def test_security_event_collector_handles_empty_log(monkeypatch):
+    import subprocess
+    from basesentinel_agent import windows_eventlog
+
+    def fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, "[]", "")
+
+    monkeypatch.setattr(windows_eventlog.subprocess, "run", fake_run)
+    assert windows_eventlog.collect_security_events() == []
