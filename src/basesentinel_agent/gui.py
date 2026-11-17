@@ -15,8 +15,8 @@ class AgentWindow:
     def __init__(self, root):
         self.root = root
         self.root.title("BaseSentinel Agent")
-        self.root.geometry("520x390")
-        self.root.minsize(480, 360)
+        self.root.geometry("560x360")
+        self.root.minsize(500, 330)
         self.process = None
 
         frame = ttk.Frame(root, padding=22)
@@ -24,10 +24,7 @@ class AgentWindow:
         ttk.Label(frame, text="BASESENTINEL", font=("Segoe UI", 18, "bold")).pack(anchor="w")
         ttk.Label(frame, text="Connect this Windows device to your security server.").pack(anchor="w", pady=(2, 18))
 
-        self.server = self._field(frame, "Server URL", "https://")
-        self.server_id = self._field(frame, "Server ID")
-        self.server_secret = self._field(frame, "Server access code", show="•")
-        self.password = self._field(frame, "Connection password (optional)", show="•")
+        self.invitation = self._field(frame, "Invitation link")
 
         actions = ttk.Frame(frame)
         actions.pack(fill="x", pady=(16, 8))
@@ -53,27 +50,24 @@ class AgentWindow:
         return entry
 
     def connect(self):
-        server = self.server.get().strip()
-        server_id = self.server_id.get().strip()
-        secret = self.server_secret.get().strip()
-        password = self.password.get()
-        if not all((server, server_id, secret)):
-            messagebox.showerror("Missing information", "Enter the server URL, Server ID and access code.")
+        invitation_link = self.invitation.get().strip()
+        if not invitation_link:
+            messagebox.showerror("Missing information", "Paste the complete invitation link.")
             return
         self.connect_button.configure(state="disabled")
         self.status.set("Connecting...")
         self.root.update_idletasks()
         try:
+            server, invitation_token = BaseSentinelClient.parse_invitation_link(invitation_link)
             client = BaseSentinelClient(server)
-            result = client.enroll_with_server(
-                server_id, secret, password, socket.gethostname(),
+            result = client.enroll_with_invitation(
+                invitation_token, socket.gethostname(),
                 platform.platform()[:80], platform.machine()[:32],
             )
             AgentConfigStore().save(server, result["token"], result["agent_id"])
             self.status.set(f"Connected. Agent ID: {result['agent_id']}")
             self.start_button.configure(state="normal")
-            self.server_secret.delete(0, "end")
-            self.password.delete(0, "end")
+            self.invitation.delete(0, "end")
         except (ValueError, RuntimeError, ConnectionError, AgentApiError, OSError) as exc:
             messagebox.showerror("Connection failed", str(exc))
             self.status.set("Connection failed.")
