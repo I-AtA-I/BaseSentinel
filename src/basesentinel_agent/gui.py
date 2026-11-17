@@ -87,6 +87,13 @@ class AgentWindow:
                 invitation_token=invitation_token,
                 invitation_code=invitation_code,
             )
+            if result.get("status") == "pending_approval":
+                self.status.set("Waiting for administrator approval. Click Connect device again after approval.")
+                messagebox.showinfo(
+                    "Approval required",
+                    "The server received your request. Ask the administrator to approve this device, then click Connect device again.",
+                )
+                return
             AgentConfigStore().save(server, result["token"], result["agent_id"])
             self.status.set(f"Connected. Agent ID: {result['agent_id']}")
             self.start_button.configure(state="normal")
