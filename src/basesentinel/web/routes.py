@@ -1,4 +1,3 @@
-
 from flask import redirect, render_template, url_for
 
 from basesentinel.web import web
@@ -17,6 +16,11 @@ def alerts():
 @web.get("/login")
 def login():
     return render_template("login.html")
+
+
+@web.get("/settings/enrollment")
+def enrollment_settings():
+    return render_template("enrollment_settings.html")
 
 
 @web.get("/logout")
