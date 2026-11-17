@@ -51,10 +51,9 @@ def test_server_enrollment_settings_create_secret_once(client, admin):
     second = client.get("/api/v1/server/enrollment", headers=headers)
 
     assert first.status_code == 200
-    assert first.get_json()["server_id"]
-    assert first.get_json()["initial_server_secret"]
+    assert first.get_json() == {"enrollment_mode": "automatic"}
     assert second.status_code == 200
-    assert second.get_json()["initial_server_secret"] is None
+    assert second.get_json() == {"enrollment_mode": "automatic"}
     assert first.headers["Cache-Control"] == "no-store"
 
 
@@ -80,7 +79,7 @@ def test_server_enrollment_password_is_optional_and_hashed(client, admin, app):
         "connection_password": "local-connection-password",
     })
     assert response.status_code == 200
-    assert response.get_json()["connection_password_required"] is True
+    assert response.get_json() == {"enrollment_mode": "automatic"}
 
     from basesentinel.models import ServerSettings
     with app.app_context():
@@ -90,10 +89,11 @@ def test_server_enrollment_password_is_optional_and_hashed(client, admin, app):
 
 def test_agent_can_enroll_with_server_access_code(client, admin):
     headers = _login(client)
-    settings = client.get("/api/v1/server/enrollment", headers=headers).get_json()
+    client.get("/api/v1/server/enrollment", headers=headers)
+    legacy_access = client.post("/api/v1/server/enrollment/rotate-secret", headers=headers).get_json()
     response = client.post("/api/v1/agents/enroll-server", json={
-        "server_id": settings["server_id"],
-        "server_secret": settings["initial_server_secret"],
+        "server_id": legacy_access["server_id"],
+        "server_secret": legacy_access["server_secret"],
         "connection_password": None,
         "hostname": "server-enrollment-test",
         "platform": "windows",
@@ -108,9 +108,10 @@ def test_agent_can_enroll_with_server_access_code(client, admin):
 
 def test_agent_enrollment_rejects_wrong_server_secret(client, admin):
     headers = _login(client)
-    settings = client.get("/api/v1/server/enrollment", headers=headers).get_json()
+    client.get("/api/v1/server/enrollment", headers=headers)
+    legacy_access = client.post("/api/v1/server/enrollment/rotate-secret", headers=headers).get_json()
     response = client.post("/api/v1/agents/enroll-server", json={
-        "server_id": settings["server_id"],
+        "server_id": legacy_access["server_id"],
         "server_secret": "incorrect-server-secret-value-000000",
         "hostname": "server-enrollment-test",
         "platform": "windows",
@@ -123,15 +124,16 @@ def test_agent_enrollment_rejects_wrong_server_secret(client, admin):
 
 def test_disabled_server_rejects_new_agent_enrollment(client, admin):
     headers = _login(client)
-    settings = client.get("/api/v1/server/enrollment", headers=headers).get_json()
+    client.get("/api/v1/server/enrollment", headers=headers)
+    legacy_access = client.post("/api/v1/server/enrollment/rotate-secret", headers=headers).get_json()
     updated = client.put("/api/v1/server/enrollment", headers=headers, json={
         "enrollment_mode": "disabled",
         "connection_password": "",
     })
     assert updated.status_code == 200
     response = client.post("/api/v1/agents/enroll-server", json={
-        "server_id": settings["server_id"],
-        "server_secret": settings["initial_server_secret"],
+        "server_id": legacy_access["server_id"],
+        "server_secret": legacy_access["server_secret"],
         "hostname": "server-enrollment-test",
         "platform": "windows",
         "agent_version": "0.1.0",
