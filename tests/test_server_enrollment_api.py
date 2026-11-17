@@ -86,3 +86,56 @@ def test_server_enrollment_password_is_optional_and_hashed(client, admin, app):
     with app.app_context():
         settings = db.session.get(ServerSettings, 1)
         assert settings.connection_password_hash != "local-connection-password"
+
+
+def test_agent_can_enroll_with_server_access_code(client, admin):
+    headers = _login(client)
+    settings = client.get("/api/v1/server/enrollment", headers=headers).get_json()
+    response = client.post("/api/v1/agents/enroll-server", json={
+        "server_id": settings["server_id"],
+        "server_secret": settings["initial_server_secret"],
+        "connection_password": None,
+        "hostname": "server-enrollment-test",
+        "platform": "windows",
+        "agent_version": "0.1.0",
+        "platform_version": "Windows 11",
+        "architecture": "AMD64",
+    })
+    assert response.status_code == 201
+    assert response.get_json()["agent_id"]
+    assert response.get_json()["token"]
+
+
+def test_agent_enrollment_rejects_wrong_server_secret(client, admin):
+    headers = _login(client)
+    settings = client.get("/api/v1/server/enrollment", headers=headers).get_json()
+    response = client.post("/api/v1/agents/enroll-server", json={
+        "server_id": settings["server_id"],
+        "server_secret": "incorrect-server-secret-value-000000",
+        "hostname": "server-enrollment-test",
+        "platform": "windows",
+        "agent_version": "0.1.0",
+        "platform_version": "Windows 11",
+        "architecture": "AMD64",
+    })
+    assert response.status_code == 401
+
+
+def test_disabled_server_rejects_new_agent_enrollment(client, admin):
+    headers = _login(client)
+    settings = client.get("/api/v1/server/enrollment", headers=headers).get_json()
+    updated = client.put("/api/v1/server/enrollment", headers=headers, json={
+        "enrollment_mode": "disabled",
+        "connection_password": "",
+    })
+    assert updated.status_code == 200
+    response = client.post("/api/v1/agents/enroll-server", json={
+        "server_id": settings["server_id"],
+        "server_secret": settings["initial_server_secret"],
+        "hostname": "server-enrollment-test",
+        "platform": "windows",
+        "agent_version": "0.1.0",
+        "platform_version": "Windows 11",
+        "architecture": "AMD64",
+    })
+    assert response.status_code == 401
