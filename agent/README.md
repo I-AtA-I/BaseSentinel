@@ -91,3 +91,10 @@ flask --app "basesentinel:create_app" db upgrade
 ```
 
 The server requires `PAIRING_CODE_PEPPER` to be configured with at least 32 bytes of random data, as with the existing one-time enrollment flow.
+
+
+## Temporary invitation links
+
+Administrators can create single-use enrollment invitations from **Agent enrollment** in the dashboard. Choose an expiry between 5 minutes and 24 hours, copy the generated HTTPS invitation link, and share it with the device owner. The token is stored as a keyed hash, shown only when created, and can be revoked before use.
+
+On Windows, open `basesentinel-agent-gui`, paste the complete invitation link into **Invitation link**, and select **Connect device**. The link contains the server address and a temporary token in its URL fragment; browsers do not send the fragment to the server in HTTP requests. The client exchanges the token directly for an individual agent credential. Invitations work while server enrollment mode is set to **Automatic**; disabled enrollment rejects them. Existing enrolled agents are not affected.
