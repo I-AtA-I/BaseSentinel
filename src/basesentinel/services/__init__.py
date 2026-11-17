@@ -32,6 +32,10 @@ from basesentinel.services.enrollment import (
     InvalidPairingCodeError,
     AssetAlreadyEnrolledError,
 )
+from basesentinel.services.server_enrollment import (
+    ServerEnrollmentService,
+    ServerAccessError,
+)
 
 from basesentinel.services.authentication import (
     AgentAuthenticationService,
@@ -60,6 +64,8 @@ __all__ = [
     "EnrollmentError",
     "InvalidPairingCodeError",
     "AssetAlreadyEnrolledError",
+    "ServerEnrollmentService",
+    "ServerAccessError",
     "AgentAuthenticationService",
     "AuthenticatedAgent",
     "AgentCredentialService",
