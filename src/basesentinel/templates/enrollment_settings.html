@@ -38,8 +38,12 @@
                 <button id="create-invitation" class="secondary-button" type="button" style="margin-top:14px">Create invitation</button>
                 <div id="invitation-result" hidden style="margin-top:16px">
                     <p class="muted">Copy this link and share it with the device owner. Treat it like a temporary password.</p>
+                    <label for="invitation-link">Invitation link</label>
                     <input id="invitation-link" type="text" readonly autocomplete="off">
                     <button id="copy-invitation" class="secondary-button" type="button" style="margin-top:10px">Copy invitation link</button>
+                    <label for="invitation-code" style="display:block;margin-top:18px">Invitation code</label>
+                    <code id="invitation-code" style="display:block;font-size:1.35rem;letter-spacing:.12em;overflow-wrap:anywhere"></code>
+                    <button id="copy-invitation-code" class="secondary-button" type="button" style="margin-top:10px">Copy invitation code</button>
                 </div>
                 <div style="margin-top:22px">
                     <h3>Recent invitations</h3>
