@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from basesentinel import create_app, db
 from basesentinel.models import Agent, Asset
 from basesentinel.services.users import UserService
@@ -50,7 +52,7 @@ def test_admin_can_create_one_time_pairing_code():
 
     with app.app_context():
         from basesentinel.models import PairingCode
-        record = db.session.get(PairingCode, response.json["id"])
+        record = db.session.get(PairingCode, UUID(response.json["id"]))
         assert record is not None
         assert record.code_hash != response.json["code"]
 
@@ -115,8 +117,8 @@ def test_agent_can_enroll_with_pairing_code():
     assert response.headers["Cache-Control"] == "no-store"
 
     with app.app_context():
-        agent = db.session.get(Agent, response.json["agent_id"])
-        asset = db.session.get(Asset, response.json["asset_id"])
+        agent = db.session.get(Agent, UUID(response.json["agent_id"]))
+        asset = db.session.get(Asset, UUID(response.json["asset_id"]))
         assert agent is not None
         assert agent.status == "active"
         assert asset.hostname == "test-endpoint"
