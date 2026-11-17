@@ -136,8 +136,9 @@ document.getElementById("create-invitation").addEventListener("click", async () 
         });
         const link = window.location.origin + "/agent-invite#invite=" + encodeURIComponent(data.invitation_token);
         document.getElementById("invitation-link").value = link;
+        document.getElementById("invitation-code").textContent = data.invitation_code;
         document.getElementById("invitation-result").hidden = false;
-        showMessage("Invitation created. Copy the link now; the token cannot be retrieved later.");
+        showMessage("Invitation created. Copy the link or code now; neither can be retrieved later.");
         await loadInvitations();
     } catch (error) {
         showMessage(error.message, true);
@@ -155,5 +156,16 @@ document.getElementById("copy-invitation").addEventListener("click", async () =>
         field.focus();
         field.select();
         showMessage("Select and copy the invitation link manually.");
+    }
+});
+
+
+document.getElementById("copy-invitation-code").addEventListener("click", async () => {
+    const code = document.getElementById("invitation-code").textContent;
+    try {
+        await navigator.clipboard.writeText(code);
+        showMessage("Invitation code copied.");
+    } catch (_) {
+        showMessage("Select and copy the invitation code manually.");
     }
 });
