@@ -28,6 +28,7 @@ class AgentWindow:
         self.enrolling = False
         self.closing = False
         self.config_loaded = False
+        self.batch_size = tk.StringVar(value="500")
 
         frame = ttk.Frame(root, padding=20)
         frame.pack(fill="both", expand=True)
@@ -122,6 +123,18 @@ class AgentWindow:
             state="disabled",
         )
         self.stop_button.pack(side="left", padx=(8, 0))
+
+        batch_control = ttk.Frame(actions)
+        batch_control.pack(side="right")
+        ttk.Label(batch_control, text="Delivery batch").pack(side="left", padx=(0, 6))
+        self.batch_size_select = ttk.Combobox(
+            batch_control,
+            textvariable=self.batch_size,
+            values=("50", "100", "250", "500"),
+            width=5,
+            state="readonly",
+        )
+        self.batch_size_select.pack(side="left")
 
         self.status = tk.StringVar(value="Not connected")
         ttk.Label(
@@ -241,7 +254,11 @@ class AgentWindow:
             state="normal" if idle and ready else "disabled"
         )
         self.stop_button.configure(
-            state="normal" if not idle else "disabled"
+            state=(
+                "normal"
+                if self.process is not None and self.process_task == "run"
+                else "disabled"
+            )
         )
 
     def connect(self, tab_index: int) -> None:
@@ -327,7 +344,7 @@ class AgentWindow:
         try:
             process = subprocess.Popen(
                 command,
-                stdin=subprocess.DEVNULL,
+                stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -476,37 +493,61 @@ class AgentWindow:
     def diagnose(self) -> None:
         self._start_process("diagnostics", ["diagnostics"])
 
+    def _selected_batch_size(self) -> str:
+        return self.batch_size.get()
+
     def collect_now(self) -> None:
-        self._start_process("collect", ["collect", "--batch-size", "50"])
+        self._start_process(
+            "collect",
+            ["collect", "--batch-size", self._selected_batch_size()],
+        )
 
     def start(self) -> None:
-        self._start_process("run", ["run"])
+        self._start_process(
+            "run",
+            ["run", "--batch-size", self._selected_batch_size()],
+        )
+
+    @staticmethod
+    def _send_stop_request(process: subprocess.Popen) -> None:
+        stream = process.stdin
+        if stream is None or stream.closed:
+            return
+        try:
+            stream.write("\n")
+            stream.flush()
+        except (BrokenPipeError, OSError, ValueError):
+            pass
+        finally:
+            try:
+                stream.close()
+            except OSError:
+                pass
 
     def stop(self) -> None:
         process = self.process
-        if process is None or process.poll() is not None:
+        if (
+            process is None
+            or process.poll() is not None
+            or self.process_task != "run"
+        ):
             return
 
-        self.status.set("Stopping agent...")
-        self._append_log("Stop requested.")
-        process.terminate()
+        self._send_stop_request(process)
+        self.status.set("Stop requested · finishing the current operation...")
+        self._append_log("Graceful stop requested.")
 
-        try:
-            process.wait(timeout=4)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=2)
+        self.stop_button.configure(state="disabled")
 
     def close(self) -> None:
         self.closing = True
         process = self.process
-        if process is not None and process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=2)
+        if (
+            process is not None
+            and process.poll() is None
+            and self.process_task == "run"
+        ):
+            self._send_stop_request(process)
         self.root.destroy()
 
 
