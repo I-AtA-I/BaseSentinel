@@ -434,7 +434,7 @@ class AgentWindow:
             re.IGNORECASE,
         )
         progress_match = re.search(
-            r"Delivery progress: acknowledged (\\d+) event\\(s\\)",
+            r"Delivery progress: acknowledged (\d+) event\(s\)",
             message,
             re.IGNORECASE,
         )
