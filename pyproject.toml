@@ -20,6 +20,9 @@ dev = [
     "pytest>=8.0"
 ]
 
+[project.scripts]
+basesentinel-agent = "basesentinel_agent.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
