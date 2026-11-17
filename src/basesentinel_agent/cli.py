@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import math
 import platform
 import socket
-from pathlib import Path
+import time
 
-from basesentinel_agent.client import BaseSentinelClient
+from basesentinel_agent.client import AgentApiError, BaseSentinelClient
 from basesentinel_agent.queue import EventQueue
 from basesentinel_agent.storage import AgentConfigStore, default_data_dir
 from basesentinel_agent.windows_eventlog import collect_security_events
@@ -13,6 +14,11 @@ from basesentinel_agent.windows_eventlog import collect_security_events
 
 def _queue() -> EventQueue:
     return EventQueue(default_data_dir() / "events.sqlite3")
+
+
+def _client_from_config() -> BaseSentinelClient:
+    config = AgentConfigStore().load()
+    return BaseSentinelClient(config["server_url"], config["token"])
 
 
 def enroll(args) -> int:
@@ -30,38 +36,83 @@ def enroll(args) -> int:
     return 0
 
 
-def collect(args) -> int:
-    config = AgentConfigStore().load()
-    client = BaseSentinelClient(config["server_url"], config["token"])
-    queue = _queue()
-
+def _collect_and_send(client: BaseSentinelClient, queue: EventQueue, batch_size: int) -> tuple[int, int, int, int]:
     checkpoint = queue.security_checkpoint()
     discovered, next_checkpoint = collect_security_events(checkpoint)
     queue.add_batch_and_checkpoint(discovered, next_checkpoint)
 
     sent = 0
-    for event in queue.pending(limit=args.batch_size):
+    for event in queue.pending(limit=batch_size):
         try:
             client.send_event(event)
-        except ConnectionError:
-            print(f"Server unavailable. {len(queue)} event(s) remain queued.")
-            return 2
-        except Exception as exc:
+        except AgentApiError as exc:
+            if exc.status in (401, 403):
+                raise
             print(f"Could not deliver event {event['event_uid']}: {exc}")
             continue
         queue.acknowledge(event["event_uid"])
         sent += 1
 
+    return len(discovered), sent, len(queue), next_checkpoint
+
+
+def collect(args) -> int:
+    client = _client_from_config()
+    discovered, sent, pending, checkpoint = _collect_and_send(client, _queue(), args.batch_size)
     print(
-        f"Collected {len(discovered)} event(s); delivered {sent}; "
-        f"pending {len(queue)}; Security log checkpoint {next_checkpoint}."
+        f"Collected {discovered} event(s); delivered {sent}; "
+        f"pending {pending}; Security log checkpoint {checkpoint}."
     )
     return 0
 
 
+def _run_cycle(client: BaseSentinelClient, queue: EventQueue, batch_size: int) -> tuple[int, int, int, int]:
+    # The authenticated identity request also refreshes the server-side agent heartbeat.
+    client.identity()
+    return _collect_and_send(client, queue, batch_size)
+
+
+def _positive_interval(value: str) -> float:
+    try:
+        interval = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("interval must be a number of seconds") from None
+    if not math.isfinite(interval) or interval <= 0:
+        raise argparse.ArgumentTypeError("interval must be a finite number greater than zero")
+    return interval
+
+
+def run(args) -> int:
+    client = _client_from_config()
+    queue = _queue()
+    print(f"BaseSentinel agent running. Collection interval: {args.interval:g}s. Press Ctrl+C to stop.")
+
+    try:
+        while True:
+            try:
+                discovered, sent, pending, checkpoint = _run_cycle(client, queue, args.batch_size)
+                print(
+                    f"Heartbeat OK; collected {discovered}; delivered {sent}; "
+                    f"pending {pending}; Security log checkpoint {checkpoint}."
+                )
+            except ConnectionError as exc:
+                print(f"Server unavailable: {exc} Pending events remain in the local queue.")
+            except AgentApiError as exc:
+                if exc.status in (401, 403):
+                    print(f"Agent authentication failed (HTTP {exc.status}). Re-enroll before running again.")
+                    return 1
+                print(f"BaseSentinel API error (HTTP {exc.status}): {exc}")
+            except Exception as exc:
+                print(f"Collection cycle failed: {exc}")
+
+            time.sleep(args.interval)
+    except KeyboardInterrupt:
+        print("\nBaseSentinel agent stopped.")
+        return 0
+
+
 def identity(args) -> int:
-    config = AgentConfigStore().load()
-    client = BaseSentinelClient(config["server_url"], config["token"])
+    client = _client_from_config()
     result = client.identity()
     print(f"Agent {result['agent_id']}: {result['status']}")
     return 0
@@ -79,6 +130,11 @@ def build_parser() -> argparse.ArgumentParser:
     collect_parser = commands.add_parser("collect", help="Collect and deliver allowlisted Windows Security events.")
     collect_parser.add_argument("--batch-size", type=int, default=50)
     collect_parser.set_defaults(handler=collect)
+
+    run_parser = commands.add_parser("run", help="Continuously collect events and send periodic heartbeats.")
+    run_parser.add_argument("--interval", type=_positive_interval, default=60.0, help="Seconds between collection cycles (default: 60).")
+    run_parser.add_argument("--batch-size", type=int, default=50)
+    run_parser.set_defaults(handler=run)
 
     identity_parser = commands.add_parser("status", help="Check the enrolled agent identity.")
     identity_parser.set_defaults(handler=identity)
