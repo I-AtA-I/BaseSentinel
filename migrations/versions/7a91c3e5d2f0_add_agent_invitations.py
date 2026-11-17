@@ -16,9 +16,9 @@ depends_on = None
 def upgrade():
     op.create_table(
         "agent_invitations",
-        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("id", sa.String(length=32), nullable=False),
         sa.Column("token_hash", sa.String(length=64), nullable=False),
-        sa.Column("created_by_user_id", sa.String(length=36), nullable=False),
+        sa.Column("created_by_user_id", sa.String(length=32), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("expires_at", sa.DateTime(), nullable=False),
         sa.Column("consumed_at", sa.DateTime(), nullable=True),
