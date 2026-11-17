@@ -22,23 +22,47 @@ _MAX_BATCH = 1000
 
 # The only interpolated value is a validated integer Windows EventRecordID.
 _POWERSHELL = r"""
+$ErrorActionPreference = 'Stop'
 $checkpoint = {record_id}
-$latest = Get-WinEvent -LogName 'Security' -MaxEvents 1 -ErrorAction SilentlyContinue
-$latestId = if ($null -eq $latest) {{ 0 }} else {{ [long]$latest.RecordId }}
-if ($checkpoint -gt $latestId) {{ $checkpoint = 0 }}
-$xpath = "*[System[(EventID=4624 or EventID=4625 or EventID=4672 or EventID=4720) and (EventRecordID > $checkpoint)]]"
-$events = @(Get-WinEvent -LogName 'Security' -FilterXPath $xpath -Oldest -MaxEvents {_max_batch} -ErrorAction SilentlyContinue)
-$result = @($events | ForEach-Object {{
-    [pscustomobject]@{{
-        Id = $_.Id
-        RecordId = $_.RecordId
-        TimeCreated = $_.TimeCreated.ToUniversalTime().ToString('o')
-        MachineName = $_.MachineName
-        Message = $_.Message
-        Xml = $_.ToXml()
+
+try {{
+    $securityLog = Get-WinEvent -ListLog 'Security' -ErrorAction Stop
+    if (-not $securityLog.IsEnabled) {{
+        throw 'The Windows Security event log is disabled.'
     }}
-}})
-[pscustomobject]@{{ LatestRecordId = $latestId; Events = $result }} | ConvertTo-Json -Depth 5 -Compress
+
+    $latestId = 0
+    if ([long]$securityLog.RecordCount -gt 0) {{
+        $latest = Get-WinEvent -LogName 'Security' -MaxEvents 1 -ErrorAction Stop
+        if ($null -ne $latest) {{
+            $latestId = [long]$latest.RecordId
+        }}
+    }}
+
+    if ($checkpoint -gt $latestId) {{ $checkpoint = 0 }}
+    $xpath = "*[System[(EventID=4624 or EventID=4625 or EventID=4672 or EventID=4720) and (EventRecordID > $checkpoint)]]"
+
+    $events = @(Get-WinEvent -LogName 'Security' -FilterXPath $xpath -Oldest -MaxEvents {_max_batch} -ErrorAction SilentlyContinue | ForEach-Object {{
+        [pscustomobject]@{{
+            Id = $_.Id
+            RecordId = $_.RecordId
+            TimeCreated = $_.TimeCreated.ToUniversalTime().ToString('o')
+            MachineName = $_.MachineName
+            Message = $_.Message
+            Xml = $_.ToXml()
+        }}
+    }})
+
+    $payload = [pscustomobject]@{{
+        LatestRecordId = $latestId
+        Events = $events
+    }}
+    ConvertTo-Json -InputObject $payload -Depth 5 -Compress
+}}
+catch {{
+    [Console]::Error.WriteLine($_.Exception.Message)
+    exit 2
+}}
 """
 
 
@@ -57,22 +81,41 @@ def collect_security_events(last_record_id: int = 0) -> tuple[list[dict], int]:
     if type(last_record_id) is not int or last_record_id < 0:
         raise ValueError("Invalid Windows event record checkpoint.")
 
-    script = _POWERSHELL.format(record_id=last_record_id, _max_batch=_MAX_BATCH)
-    result = subprocess.run(
-        ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=45,
-        check=False,
+    script = _POWERSHELL.format(
+        record_id=last_record_id,
+        _max_batch=_MAX_BATCH,
     )
+    try:
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=45,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            "Reading the Windows Security event log timed out."
+        ) from exc
+    except OSError as exc:
+        raise RuntimeError(
+            "Could not start PowerShell to read the Windows Security event log."
+        ) from exc
+
     if result.returncode != 0:
         detail = result.stderr.strip()[:300]
-        raise RuntimeError(
-            "Could not read the Windows Security event log. Run with permission to read that log."
-            + (f" Details: {detail}" if detail else "")
+        message = (
+            "Could not read the Windows Security event log. "
+            "Run the agent with an account that has permission to read "
+            "the Security log (for example, an administrator or an account "
+            "granted the required Event Log Readers access)."
         )
+        raise RuntimeError(
+            message + (f" Details: {detail}" if detail else "")
+        )
+
     try:
         raw = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
@@ -83,7 +126,9 @@ def collect_security_events(last_record_id: int = 0) -> tuple[list[dict], int]:
     try:
         latest_record_id = max(0, int(raw.get("LatestRecordId") or 0))
     except (TypeError, ValueError):
-        raise RuntimeError("Windows event log returned an invalid checkpoint.") from None
+        raise RuntimeError(
+            "Windows event log returned an invalid checkpoint."
+        ) from None
 
     events = []
     record_ids = []
@@ -97,17 +142,24 @@ def collect_security_events(last_record_id: int = 0) -> tuple[list[dict], int]:
             continue
         try:
             record_id = int(record_id)
-            occurred_at = datetime.fromisoformat(item["TimeCreated"].replace("Z", "+00:00"))
+            occurred_at = datetime.fromisoformat(
+                item["TimeCreated"].replace("Z", "+00:00")
+            )
             event_data = _event_data(item["Xml"])
         except (KeyError, ValueError, ET.ParseError, TypeError):
             continue
         record_ids.append(record_id)
         event_data.update({"record_id": record_id, "computer": computer})
-        message = str(item.get("Message") or f"Windows Security event {item['Id']}")[:4096].strip()
+        message = str(
+            item.get("Message") or f"Windows Security event {item['Id']}"
+        )[:4096].strip()
         if not message:
             message = f"Windows Security event {item['Id']}"
         events.append({
-            "event_uid": str(uuid.uuid5(uuid.NAMESPACE_URL, f"windows-security:{computer}:{record_id}:{item['Id']}:{item['TimeCreated']}")),
+            "event_uid": str(uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"windows-security:{computer}:{record_id}:{item['Id']}:{item['TimeCreated']}",
+            )),
             "schema_version": 1,
             "category": category,
             "event_type": event_type,
@@ -116,7 +168,10 @@ def collect_security_events(last_record_id: int = 0) -> tuple[list[dict], int]:
             "event_code": str(item["Id"]),
             "message": message,
             "event_data": event_data,
-            "occurred_at": occurred_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "occurred_at": occurred_at.astimezone(timezone.utc).isoformat().replace(
+                "+00:00",
+                "Z",
+            ),
         })
 
     if len(raw["Events"]) >= _MAX_BATCH and record_ids:
