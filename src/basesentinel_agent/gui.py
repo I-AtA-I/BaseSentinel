@@ -229,7 +229,7 @@ class AgentWindow:
         ready = self.config_loaded
 
         self.connect_button.configure(
-            state="disabled" if self.enrolling else "normal"
+            state="disabled" if self.enrolling or not idle else "normal"
         )
         self.diagnostics_button.configure(
             state="normal" if idle and ready else "disabled"
@@ -423,7 +423,7 @@ class AgentWindow:
                     self.process_task = None
                     if code == 0:
                         self.status.set(
-                            "Collection complete."
+                            "Collection batch finished; review delivery results below."
                             if task == "collect"
                             else "Diagnostics complete."
                             if task == "diagnostics"
