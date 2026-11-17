@@ -101,7 +101,6 @@ class BaseSentinelClient:
             raise ValueError("Provide exactly one invitation link token or invitation code.")
         payload = {
             "hostname": hostname,
-            "hostname": hostname,
             "platform": "windows",
             "platform_version": platform_version,
             "architecture": architecture,
