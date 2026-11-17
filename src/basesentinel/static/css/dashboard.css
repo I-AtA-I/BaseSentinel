@@ -542,3 +542,116 @@ tbody tr:last-child td { border-bottom: 0; }
     .login-page { padding: 12px; }
     .login-card { padding: 27px 20px; }
 }
+
+
+/* Alert management workspace */
+.alerts-filter-panel { padding-bottom: 15px; }
+.alerts-filters {
+    display: grid;
+    grid-template-columns: minmax(190px, 1.4fr) repeat(2, minmax(130px, .8fr)) minmax(170px, 1fr) minmax(180px, 1fr) 105px auto;
+    align-items: end;
+    gap: 10px;
+}
+.filter-field { display: grid; min-width: 0; gap: 7px; }
+.filter-field > span {
+    color: var(--muted);
+    font-size: 9px;
+    font-weight: 850;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+}
+.filter-field input, .filter-field select {
+    width: 100%;
+    min-width: 0;
+    height: 37px;
+    padding: 0 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: 0;
+    outline: none;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 10px;
+}
+.filter-field input::placeholder { color: var(--subtle); }
+.filter-field input:focus, .filter-field select:focus { border-color: var(--accent); }
+.filter-limit-field { max-width: 105px; }
+.filter-actions { display: flex; align-items: end; gap: 7px; }
+.filter-actions .secondary-button { height: 37px; }
+.filter-apply-button {
+    width: auto;
+    min-width: 112px;
+    min-height: 37px;
+    margin: 0;
+    padding: 0 12px;
+}
+.filter-note { margin: 12px 0 0; color: var(--subtle); font-size: 10px; line-height: 1.5; }
+.alerts-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 14px 0 10px;
+    color: var(--muted);
+    font-size: 10px;
+}
+.alerts-summary strong { color: var(--text); }
+.alerts-table-panel { padding: 19px 0 0; overflow: hidden; }
+.alerts-table-panel > .panel-heading { padding: 0 20px; }
+.alerts-table th, .alerts-table td { padding-right: 14px; padding-left: 14px; }
+.alerts-table td { vertical-align: middle; }
+.detection-cell { min-width: 220px; white-space: normal; }
+.detection-cell .alert-title, .alert-rule-key, .alert-id { display: block; }
+.detection-cell .alert-title { max-width: 320px; line-height: 1.4; }
+.alert-rule-key {
+    margin-top: 4px;
+    color: var(--accent);
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 9px;
+}
+.alert-id {
+    margin-top: 3px;
+    color: var(--subtle);
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 8px;
+}
+.alert-actions { display: flex; min-width: 82px; gap: 5px; }
+.alert-actions .action-button { white-space: nowrap; }
+.read-only-label { color: var(--subtle); font-size: 9px; text-transform: uppercase; letter-spacing: .06em; }
+.pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 13px 20px;
+    border-top: 1px solid var(--line);
+}
+.pagination-label { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.pagination-actions { display: flex; gap: 6px; }
+.pagination-actions button {
+    min-width: 34px;
+    min-height: 32px;
+    border: 1px solid var(--line-strong);
+    border-radius: 0;
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 12px;
+}
+.pagination-actions button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.pagination-actions button:disabled { opacity: .35; cursor: not-allowed; }
+@media (max-width: 1380px) {
+    .alerts-filters { grid-template-columns: repeat(3, minmax(0,1fr)); }
+    .filter-actions { align-items: end; }
+}
+@media (max-width: 780px) {
+    .alerts-filters { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .filter-search-field { grid-column: 1 / -1; }
+    .filter-actions { grid-column: 1 / -1; }
+}
+@media (max-width: 460px) {
+    .alerts-filters { grid-template-columns: 1fr; }
+    .filter-search-field, .filter-actions { grid-column: auto; }
+    .filter-limit-field { max-width: none; }
+    .alerts-summary, .pagination { align-items: flex-start; flex-direction: column; }
+    .pagination-actions { width: 100%; }
+    .pagination-actions button { flex: 1; }
+}
