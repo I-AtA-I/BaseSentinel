@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Agent enrollment | BaseSentinel</title>
+    <link rel="stylesheet" href="{{ url_for('web.static', filename='css/dashboard.css') }}">
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <a class="brand" href="/"><span class="brand-mark">B</span><span><strong>BASESENTINEL</strong><small>LOCAL SECURITY SYSTEM</small></span></a>
+            <div class="sidebar-section">
+                <span class="sidebar-label">CONFIGURATION</span>
+                <a class="nav-link" href="/">◈ Overview</a>
+                <a class="nav-link active" href="/settings/enrollment">▦ Agent enrollment</a>
+            </div>
+        </aside>
+        <main class="main-content">
+            <header class="topbar"><div><p class="eyebrow">SERVER CONFIGURATION</p><h1>Agent enrollment<span style="color:var(--accent)">.</span></h1></div></header>
+            <section class="panel">
+                <div class="panel-heading"><div><h2>Server identity</h2><p class="muted">Share these connection details only with devices you trust.</p></div></div>
+                <p class="muted">Server ID</p><code id="server-id">Loading...</code>
+                <p class="muted" style="margin-top:18px">Server access code</p>
+                <div id="secret-notice" class="muted">The access code is never displayed again after creation. Rotate it if you no longer have it.</div>
+                <code id="server-secret" style="overflow-wrap:anywhere"></code>
+                <button id="rotate-secret" class="secondary-button" type="button" style="margin-top:12px">Generate / rotate access code</button>
+            </section>
+            <section class="panel">
+                <div class="panel-heading"><div><h2>Connection policy</h2><p class="muted">Control whether new devices can enroll.</p></div></div>
+                <label for="enrollment-mode">New agent enrollment</label>
+                <select id="enrollment-mode"><option value="automatic">Automatic — valid credentials connect immediately</option><option value="disabled">Disabled — reject new devices</option></select>
+                <label for="connection-password" style="display:block;margin-top:18px">Connection password (optional)</label>
+                <input id="connection-password" type="password" autocomplete="new-password" placeholder="Leave blank to remove password">
+                <button id="save-settings" class="secondary-button" type="button" style="margin-top:16px">Save settings</button>
+            </section>
+            <div id="settings-message" class="dashboard-error" role="status" hidden></div>
+        </main>
+    </div>
+    <script src="{{ url_for('web.static', filename='js/enrollment-settings.js') }}" defer></script>
+</body>
+</html>

@@ -27,6 +27,7 @@ from basesentinel.services.credentials import (
 from basesentinel.services.sessions import UserSessionService
 from basesentinel.services.users import UserService
 from basesentinel.services.pairings import PairingService
+from basesentinel.services.server_enrollment import ServerEnrollmentService, ServerAccessError
 from basesentinel.services.enrollment import (EnrollmentService, InvalidPairingCodeError, AssetAlreadyEnrolledError, EnrollmentError)
 from werkzeug.exceptions import RequestEntityTooLarge
 
@@ -1236,3 +1237,97 @@ def dashboard_timeline():
     response.headers["Cache-Control"] = "no-store"
 
     return response, 200
+
+
+# ---------------------------------------------------------------------
+# Persistent server enrollment access
+# ---------------------------------------------------------------------
+
+@api.get("/server/enrollment")
+@require_user
+@require_role("admin")
+def get_server_enrollment_settings():
+    settings, initial_secret = ServerEnrollmentService.get_or_create_settings()
+    response = jsonify({
+        "server_id": settings.server_id,
+        "enrollment_mode": settings.enrollment_mode,
+        "connection_password_required": settings.connection_password_hash is not None,
+        "initial_server_secret": initial_secret,
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response, 200
+
+
+@api.put("/server/enrollment")
+@require_user
+@require_role("admin")
+def update_server_enrollment_settings():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or set(data) - {"enrollment_mode", "connection_password"}:
+        return _invalid_request_response()
+    mode = data.get("enrollment_mode", "automatic")
+    password = data.get("connection_password")
+    try:
+        settings = ServerEnrollmentService.update_settings(mode, password)
+    except ValueError as exc:
+        return _error_response("invalid_server_settings", str(exc), 400)
+    response = jsonify({
+        "server_id": settings.server_id,
+        "enrollment_mode": settings.enrollment_mode,
+        "connection_password_required": settings.connection_password_hash is not None,
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response, 200
+
+
+@api.post("/server/enrollment/rotate-secret")
+@require_user
+@require_role("admin")
+def rotate_server_enrollment_secret():
+    settings, secret = ServerEnrollmentService.rotate_secret()
+    response = jsonify({"server_id": settings.server_id, "server_secret": secret})
+    response.headers["Cache-Control"] = "no-store"
+    return response, 200
+
+
+@api.post("/agents/enroll-server")
+def enroll_agent_with_server_access():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _invalid_request_response()
+    allowed = {
+        "server_id", "server_secret", "connection_password", "hostname",
+        "platform", "agent_version", "platform_version", "architecture",
+    }
+    if set(data) - allowed:
+        return _error_response("invalid_enrollment_request", "Enrollment request contains unsupported fields.", 400)
+    try:
+        result = ServerEnrollmentService.enroll(
+            server_id=data.get("server_id"),
+            server_secret=data.get("server_secret"),
+            connection_password=data.get("connection_password"),
+            hostname=data.get("hostname"),
+            platform=data.get("platform"),
+            agent_version=data.get("agent_version"),
+            platform_version=data.get("platform_version"),
+            architecture=data.get("architecture"),
+        )
+    except ServerAccessError:
+        return _error_response("invalid_server_access", "Server access details are invalid or enrollment is disabled.", 401)
+    except AssetAlreadyEnrolledError:
+        return _error_response("asset_already_enrolled", "Target asset already has an active agent.", 409)
+    except EnrollmentError as exc:
+        return _error_response("enrollment_unavailable", str(exc), 409)
+    except ValueError as exc:
+        return _error_response("invalid_enrollment_request", str(exc), 400)
+    except RuntimeError:
+        return _error_response("enrollment_not_configured", "Server enrollment is not configured.", 503)
+    response = jsonify({
+        "agent_id": str(result.agent.id),
+        "asset_id": str(result.asset.id),
+        "token": result.token,
+        "token_type": "Bearer",
+        "expires_at": _serialize_datetime(result.credential.expires_at),
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response, 201

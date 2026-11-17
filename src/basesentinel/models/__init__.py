@@ -15,6 +15,7 @@ from basesentinel.models.agents import (
     AgentCredential,
     PairingCode,
 )
+from basesentinel.models.server_settings import ServerSettings
 
 __all__ = [
     "Asset",
@@ -24,6 +25,7 @@ __all__ = [
     "Agent",
     "AgentCredential",
     "PairingCode",
+    "ServerSettings",
     "SecurityEvent",
     "UserSession",
     "Alert",

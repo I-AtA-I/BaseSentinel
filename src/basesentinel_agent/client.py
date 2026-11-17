@@ -59,6 +59,19 @@ class BaseSentinelClient:
             "agent_version": "0.1.0",
         })
 
+    def enroll_with_server(self, server_id: str, server_secret: str, connection_password: str | None,
+                           hostname: str, platform_version: str, architecture: str) -> dict:
+        return self._request("POST", "/api/v1/agents/enroll-server", {
+            "server_id": server_id,
+            "server_secret": server_secret,
+            "connection_password": connection_password or None,
+            "hostname": hostname,
+            "platform": "windows",
+            "platform_version": platform_version,
+            "architecture": architecture,
+            "agent_version": "0.1.0",
+        })
+
     def send_event(self, event: dict) -> dict:
         if not self.token:
             raise ValueError("Agent is not enrolled.")
