@@ -202,6 +202,8 @@ class AgentInvitationService:
                 enrollment_request.hostname != hostname
                 or enrollment_request.platform != platform
                 or enrollment_request.agent_version != agent_version
+                or enrollment_request.platform_version != platform_version
+                or enrollment_request.architecture != architecture
             ):
                 raise InvalidInvitationError()
 
