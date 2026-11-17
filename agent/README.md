@@ -42,13 +42,13 @@ Start a visible foreground process:
 basesentinel-agent run
 ```
 
-By default, the agent runs a collection cycle every 60 seconds. Each cycle first makes an authenticated identity request, which also refreshes the server-side heartbeat, then reads the next Security log batch and delivers queued events. Configure the interval and delivery batch size if needed:
+By default, the agent runs a collection cycle every 60 seconds and attempts to deliver up to 500 queued events per cycle. Each cycle first makes an authenticated identity request, which also refreshes the server-side heartbeat, then reads the next Security log batch and delivers queued events. Configure the interval and delivery limit if needed (the delivery limit is 1–500):
 
 ```powershell
-basesentinel-agent run --interval 30 --batch-size 100
+basesentinel-agent run --interval 30 --batch-size 250
 ```
 
-Stop the process with `Ctrl+C`. If the server is unavailable, pending events stay in the local SQLite queue and the agent retries on the next cycle. Authentication failures (HTTP 401/403) stop the process so the endpoint can be re-enrolled or its access fixed.
+Stop the foreground process with `Ctrl+C`. The GUI Stop button sends a graceful stop request and lets the current event operation finish instead of force-killing the process. If the server is unavailable, pending events stay in the local SQLite queue and the agent retries on the next cycle. Authentication failures (HTTP 401/403) stop the process so the endpoint can be re-enrolled or its access fixed.
 
 ## Check enrollment
 
@@ -74,23 +74,15 @@ Install the project in its virtual environment, then launch:
 basesentinel-agent-gui
 ```
 
-Enter the BaseSentinel server URL, Server ID and server access code. Enter the connection password only when the server administrator configured one. The client enrolls the device and stores its individual agent credential using Windows DPAPI.
+Use either the one-time invitation link or the invitation code plus the server URL. The current invitation workflow does not require a Server ID, server access code, or connection password. The client exchanges the invitation for an individual agent credential and stores it using Windows DPAPI.
 
 Use **Start monitoring** to launch collection in a background process while the GUI remains open. Closing the GUI stops that process. The GUI does not install a Windows service or configure automatic startup.
 
-## Server-side enrollment settings
+## Enrollment policy
 
-An administrator can open **Agent enrollment** from the dashboard. The server generates a random Server ID and a high-entropy access code. The access code is displayed only once; rotate it if it is lost. Only its keyed hash is stored in the database.
+The administrator can choose **Automatic**, **Approval required**, or **Disabled** for new invitation-based enrollments. Existing agents continue authenticating with their own individual credentials.
 
-A connection password is optional and stored as a password hash. New enrollment can be switched between automatic and disabled. Existing enrolled agents continue using their individual credentials and are not affected by rotating the server access code.
-
-The first access to enrollment settings creates the server identity. Apply database migrations before using this feature:
-
-```powershell
-flask --app "basesentinel:create_app" db upgrade
-```
-
-The server requires `PAIRING_CODE_PEPPER` to be configured with at least 32 bytes of random data, as with the existing one-time enrollment flow.
+The server still retains internal legacy identity fields for compatibility with the old `/api/v1/agents/enroll-server` endpoint. They are not displayed in the enrollment UI and are not used by the current invitation link/code flow. New devices should be enrolled with one-time invitations.
 
 
 ## Temporary invitation links
@@ -122,7 +114,7 @@ basesentinel-agent collect --batch-size 50
 basesentinel-agent run --interval 60 --batch-size 50
 ```
 
-Diagnostics checks the authenticated server connection, local pending queue, checkpoint, and whether the current Windows user can read the Security event log. It does not send events or change the checkpoint. **Collect now** (or the `collect` command) reads new events, persists them and the checkpoint locally, then attempts to deliver up to the selected batch size. Continuous mode repeats that process and sends an authenticated heartbeat every cycle.
+Diagnostics checks the authenticated server connection, local pending queue, checkpoint, and whether the current Windows user can read the Security event log. It does not send events or change the checkpoint. **Collect now** (or the `collect` command) reads new events, persists them and the checkpoint locally, then attempts to deliver up to 500 queued events by default. The GUI lets the operator choose a delivery limit of 50, 100, 250, or 500. Continuous mode repeats that process and sends an authenticated heartbeat every cycle. A large pending count is a backlog, not a delivery confirmation; it decreases as the server acknowledges queued events.
 
 The current collector reads only Windows Security event IDs **4624**, **4625**, **4672**, and **4720**. It does not ingest every Windows event or events from other channels. The Windows account running the agent must have permission to read the Security log. If diagnostics reports access denied, run the agent under an account with the required Security log read permission.
 
