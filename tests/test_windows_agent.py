@@ -187,3 +187,65 @@ def test_security_event_collector_keeps_checkpoint_when_batch_is_full(monkeypatc
 
     assert len(events) == windows_eventlog._MAX_BATCH
     assert checkpoint == 1000
+
+
+def test_run_command_defaults_to_sixty_second_interval():
+    from basesentinel_agent.cli import build_parser
+
+    args = build_parser().parse_args(["run"])
+    assert args.interval == 60.0
+    assert args.batch_size == 50
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "nan", "inf", "not-a-number"])
+def test_run_command_rejects_invalid_intervals(value):
+    from basesentinel_agent.cli import build_parser
+
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["run", "--interval", value])
+
+
+def test_run_cycle_sends_heartbeat_before_collecting(monkeypatch):
+    from basesentinel_agent import cli
+
+    calls = []
+
+    class FakeClient:
+        def identity(self):
+            calls.append("heartbeat")
+
+    class FakeQueue:
+        pass
+
+    def fake_collect_and_send(client, queue, batch_size):
+        calls.append(("collect", batch_size))
+        return 2, 2, 0, 150
+
+    monkeypatch.setattr(cli, "_collect_and_send", fake_collect_and_send)
+    result = cli._run_cycle(FakeClient(), FakeQueue(), 25)
+
+    assert result == (2, 2, 0, 150)
+    assert calls == ["heartbeat", ("collect", 25)]
+
+
+def test_run_stops_cleanly_on_keyboard_interrupt(monkeypatch, capsys):
+    from argparse import Namespace
+    from basesentinel_agent import cli
+
+    class FakeClient:
+        pass
+
+    class FakeQueue:
+        pass
+
+    monkeypatch.setattr(cli, "_client_from_config", lambda: FakeClient())
+    monkeypatch.setattr(cli, "_queue", lambda: FakeQueue())
+    monkeypatch.setattr(cli, "_run_cycle", lambda *args: (0, 0, 0, 0))
+
+    def stop_after_cycle(interval):
+        assert interval == 30
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli.time, "sleep", stop_after_cycle)
+    assert cli.run(Namespace(interval=30, batch_size=50)) == 0
+    assert "agent stopped" in capsys.readouterr().out
