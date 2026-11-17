@@ -109,6 +109,13 @@ class AgentWindow:
         )
         self.collect_button.pack(side="left", padx=(8, 0))
 
+        self.drain_button = ttk.Button(
+            actions,
+            text="Drain backlog",
+            command=self.drain_backlog,
+        )
+        self.drain_button.pack(side="left", padx=(8, 0))
+
         self.start_button = ttk.Button(
             actions,
             text="Start monitoring",
@@ -250,6 +257,9 @@ class AgentWindow:
         self.collect_button.configure(
             state="normal" if idle and ready else "disabled"
         )
+        self.drain_button.configure(
+            state="normal" if idle and ready else "disabled"
+        )
         self.start_button.configure(
             state="normal" if idle and ready else "disabled"
         )
@@ -364,6 +374,7 @@ class AgentWindow:
         self.status.set({
             "diagnostics": "Running diagnostics...",
             "collect": "Collecting and delivering one batch...",
+            "drain": "Delivering the existing local queue...",
             "run": "Continuous monitoring is running.",
         }.get(task, "Agent process running."))
         self._update_actions()
@@ -417,6 +428,17 @@ class AgentWindow:
         elif "Windows Security event log" in message:
             self.status.set("Windows Security event log reported an error.")
 
+        drain_match = re.search(
+            r"Delivered (\\d+) queued event\\(s\\); pending (\\d+)\\.",
+            message,
+            re.IGNORECASE,
+        )
+        if drain_match:
+            delivered, pending = drain_match.groups()
+            self.metrics.set(
+                f"Queue drain: {delivered} delivered · {pending} pending"
+            )
+
     def _poll_messages(self) -> None:
         if self.closing:
             return
@@ -442,6 +464,8 @@ class AgentWindow:
                         self.status.set(
                             "Collection batch finished; review delivery results below."
                             if task == "collect"
+                            else "Backlog drain finished; review delivery results below."
+                            if task == "drain"
                             else "Diagnostics complete."
                             if task == "diagnostics"
                             else "Monitoring stopped."
@@ -500,6 +524,12 @@ class AgentWindow:
         self._start_process(
             "collect",
             ["collect", "--batch-size", self._selected_batch_size()],
+        )
+
+    def drain_backlog(self) -> None:
+        self._start_process(
+            "drain",
+            ["drain", "--batch-size", self._selected_batch_size()],
         )
 
     def start(self) -> None:
