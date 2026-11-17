@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#090a0c">
+    <title>Alerts | BaseSentinel</title>
+    <link rel="stylesheet" href="{{ url_for('web.static', filename='css/dashboard.css') }}">
+    <script>
+        (() => {
+            try {
+                const saved = localStorage.getItem("basesentinel_theme");
+                if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+            } catch (_) {}
+        })();
+    </script>
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <a class="brand" href="/">
+                <span class="brand-mark">B</span>
+                <span><strong>BASESENTINEL</strong><small>LOCAL SECURITY SYSTEM</small></span>
+            </a>
+            <div class="sidebar-section">
+                <span class="sidebar-label">OPERATIONS / 01</span>
+                <a class="nav-link" href="/"><span class="nav-icon">◈</span> Overview</a>
+                <a class="nav-link active" href="/alerts" aria-current="page"><span class="nav-icon">△</span> Alerts</a>
+            </div>
+            <div class="sidebar-bottom">
+                <div class="connection-indicator"><span class="status-dot"></span><span>Local instance / connected</span></div>
+                <div class="sidebar-version">BS // BUILD 0.1.0</div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">SECURITY OPERATIONS / INCIDENT QUEUE</p>
+                    <h1>Alert management<span style="color:var(--accent)">.</span></h1>
+                </div>
+                <div class="topbar-right">
+                    <div class="system-status"><span class="status-dot"></span><span>System connected</span></div>
+                    <div class="user-menu">
+                        <span id="user-initial" class="user-avatar">U</span>
+                        <div><strong id="current-username">Loading</strong><small id="current-role">—</small></div>
+                        <button id="logout-button" class="text-button" type="button">Sign out ↗</button>
+                    </div>
+                </div>
+            </header>
+
+            <section class="dashboard-toolbar">
+                <div>
+                    <span class="muted">Detection queue</span>
+                    <span id="last-updated" class="last-updated">Waiting for data...</span>
+                </div>
+                <div class="toolbar-actions">
+                    <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch theme"><span class="theme-symbol">◐</span><span class="theme-label">LIGHT MODE</span></button>
+                    <button id="refresh-button" class="secondary-button" type="button">↻ Refresh</button>
+                </div>
+            </section>
+
+            <div id="alerts-error" class="dashboard-error" role="alert" hidden></div>
+
+            <section class="metric-grid">
+                <article class="metric-card">
+                    <div class="metric-heading"><span>Matching alerts</span><span class="metric-icon">△</span></div>
+                    <strong id="count-total" class="metric-value">—</strong>
+                    <span class="metric-description">Across all matching pages</span>
+                </article>
+                <article class="metric-card">
+                    <div class="metric-heading"><span>Open on page</span><span class="metric-icon warning-icon">!</span></div>
+                    <strong id="count-open" class="metric-value">—</strong>
+                    <span class="metric-description">Require attention on this page</span>
+                </article>
+                <article class="metric-card">
+                    <div class="metric-heading"><span>High / critical</span><span class="metric-icon alert-icon">▲</span></div>
+                    <strong id="count-severe" class="metric-value">—</strong>
+                    <span class="metric-description">Severity 7–10 on this page</span>
+                </article>
+                <article class="metric-card">
+                    <div class="metric-heading"><span>Resolved on page</span><span class="metric-icon agent-icon">✓</span></div>
+                    <strong id="count-resolved" class="metric-value">—</strong>
+                    <span class="metric-description">Closed detections on this page</span>
+                </article>
+            </section>
+
+            <section class="panel alerts-filter-panel">
+                <div class="panel-heading">
+                    <div><h2>Queue filters</h2><p class="muted">Status, severity and identifiers are filtered by the API</p></div>
+                    <span class="panel-tag">LIVE QUERY</span>
+                </div>
+                <div class="alerts-filters">
+                    <label class="filter-field filter-search-field">
+                        <span>Search loaded page</span>
+                        <input id="filter-search" type="search" placeholder="Title or rule key..." autocomplete="off">
+                    </label>
+                    <label class="filter-field">
+                        <span>Status</span>
+                        <select id="filter-status">
+                            <option value="">All statuses</option>
+                            <option value="open">Open</option>
+                            <option value="acknowledged">Acknowledged</option>
+                            <option value="resolved">Resolved</option>
+                        </select>
+                    </label>
+                    <label class="filter-field">
+                        <span>Severity</span>
+                        <select id="filter-severity">
+                            <option value="">All severities</option>
+                            <option value="9-10">Critical · 9–10</option>
+                            <option value="7-8">High · 7–8</option>
+                            <option value="4-6">Medium · 4–6</option>
+                            <option value="0-3">Low · 0–3</option>
+                        </select>
+                    </label>
+                    <label class="filter-field">
+                        <span>Rule key · exact</span>
+                        <input id="filter-rule-key" type="text" maxlength="64" placeholder="e.g. high_severity_event" autocomplete="off">
+                    </label>
+                    <label class="filter-field">
+                        <span>Agent ID · exact</span>
+                        <input id="filter-agent-id" type="text" maxlength="36" placeholder="Agent UUID" autocomplete="off">
+                    </label>
+                    <label class="filter-field filter-limit-field">
+                        <span>Rows per page</span>
+                        <select id="filter-limit">
+                            <option value="10">10</option>
+                            <option value="25" selected>25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </label>
+                    <div class="filter-actions">
+                        <button id="apply-filters" class="primary-button filter-apply-button" type="button">Apply filters</button>
+                        <button id="clear-filters" class="secondary-button" type="button">Clear</button>
+                    </div>
+                </div>
+                <p class="filter-note">Text search only checks the records currently loaded on this page. Rule key and Agent ID filters run against the full alert queue.</p>
+            </section>
+
+            <div class="alerts-summary">
+                <span id="result-summary">Loading alert queue...</span>
+                <span>Order <strong>last seen · newest first</strong></span>
+            </div>
+
+            <section class="panel alerts-table-panel">
+                <div class="panel-heading">
+                    <div><h2>Detection records</h2><p class="muted">Review, acknowledge and resolve security alerts</p></div>
+                    <span class="panel-tag">ALERT REGISTRY</span>
+                </div>
+                <div class="table-scroll">
+                    <table class="alerts-table">
+                        <thead>
+                            <tr><th>Detection</th><th>Severity</th><th>Status</th><th>Occurrences</th><th>First seen</th><th>Last seen</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody id="alerts-table">
+                            <tr><td colspan="7" class="table-empty">Loading alerts...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination">
+                    <span id="pagination-label" class="pagination-label">—</span>
+                    <div class="pagination-actions">
+                        <button id="page-first" type="button" aria-label="First page">«</button>
+                        <button id="page-prev" type="button" aria-label="Previous page">‹</button>
+                        <button id="page-next" type="button" aria-label="Next page">›</button>
+                        <button id="page-last" type="button" aria-label="Last page">»</button>
+                    </div>
+                </div>
+            </section>
+
+            <footer class="page-footer"><span>BASESENTINEL / LOCAL INSTANCE</span><a href="/">← Back to overview</a></footer>
+        </main>
+    </div>
+    <script src="{{ url_for('web.static', filename='js/alerts.js') }}" defer></script>
+</body>
+</html>
