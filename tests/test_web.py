@@ -85,3 +85,34 @@ def test_api_health_endpoint_remains_available(client):
 
     assert response.status_code == 200
     assert response.get_json()["status"] == "ok"
+
+
+
+def test_alerts_page_is_available(client):
+    response = client.get("/alerts")
+
+    assert response.status_code == 200
+    assert b"Alert management" in response.data
+    assert b"Queue filters" in response.data
+    assert b"/static/js/alerts.js" in response.data
+
+
+def test_alerts_page_references_shared_stylesheet(client):
+    response = client.get("/alerts")
+
+    assert response.status_code == 200
+    assert b"/static/css/dashboard.css" in response.data
+
+
+def test_alerts_javascript_static_file_is_available(client):
+    response = client.get("/static/js/alerts.js")
+
+    assert response.status_code == 200
+    assert b"initializeAlerts" in response.data
+
+
+def test_dashboard_alert_links_open_alert_workspace(client):
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert b'href="/alerts"' in response.data
