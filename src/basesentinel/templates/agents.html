@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Agents | BaseSentinel</title>
+    <link rel="stylesheet" href="{{ url_for('web.static', filename='css/dashboard.css') }}">
+</head>
+<body>
+<div class="app-shell">
+    <aside class="sidebar">
+        <a class="brand" href="/"><span class="brand-mark">B</span><span><strong>BASESENTINEL</strong><small>LOCAL SECURITY SYSTEM</small></span></a>
+        <div class="sidebar-section">
+            <span class="sidebar-label">OPERATIONS</span>
+            <a class="nav-link" href="/">◈ Overview</a>
+            <a class="nav-link active" href="/agents">▦ Clients</a>
+            <a class="nav-link" href="/alerts">△ Alerts</a>
+            <a class="nav-link" href="/settings/enrollment">⚙ Agent enrollment</a>
+        </div>
+    </aside>
+    <main class="main-content">
+        <header class="topbar">
+            <div><p class="eyebrow">ENDPOINT MANAGEMENT</p><h1>Clients<span style="color:var(--accent)">.</span></h1></div>
+            <a class="secondary-button" href="/settings/enrollment">Enroll a client ↗</a>
+        </header>
+        <section class="dashboard-toolbar">
+            <div><span class="muted">Registered endpoints</span><span id="client-count" class="last-updated">Loading...</span></div>
+            <button id="refresh-clients" class="secondary-button" type="button">↻ Refresh</button>
+        </section>
+        <div id="clients-message" class="dashboard-error" role="status" hidden></div>
+        <section class="panel">
+            <div class="panel-heading"><div><h2>All clients</h2><p class="muted">Endpoint agents registered with this BaseSentinel server.</p></div></div>
+            <div class="table-scroll">
+                <table>
+                    <thead><tr><th>Device</th><th>Platform</th><th>Agent version</th><th>Status</th><th>Last contact</th><th>Enrolled</th><th>Actions</th></tr></thead>
+                    <tbody id="clients-table"><tr><td colspan="7" class="table-empty">Loading clients...</td></tr></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+</div>
+<script src="{{ url_for('web.static', filename='js/agents.js') }}" defer></script>
+</body>
+</html>
