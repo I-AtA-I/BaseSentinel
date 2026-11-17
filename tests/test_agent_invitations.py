@@ -60,9 +60,10 @@ def _create_invitation(client, headers, ttl=60):
     return response.get_json()
 
 
-def _enroll(client, token, hostname="invited-workstation"):
+def _enroll(client, token=None, hostname="invited-workstation", invitation_code=None):
+    credentials = {"invitation_token": token} if token else {"invitation_code": invitation_code}
     return client.post("/api/v1/agents/enroll-invitation", json={
-        "invitation_token": token,
+        **credentials,
         "hostname": hostname,
         "platform": "windows",
         "agent_version": "0.1.0",
@@ -76,11 +77,14 @@ def test_invitation_token_is_only_returned_once_and_only_hash_is_stored(client, 
     created = _create_invitation(client, admin)
 
     assert created["invitation_token"]
+    assert created["invitation_code"]
     assert created["expires_at"]
     with app.app_context():
         record = db.session.get(AgentInvitation, UUID(created["id"]))
         assert record.token_hash != created["invitation_token"]
+        assert record.code_hash != created["invitation_code"].replace("-", "")
         assert len(record.token_hash) == 64
+        assert len(record.code_hash) == 64
 
     listed = client.get("/api/v1/server/enrollment/invitations", headers=admin)
     assert listed.status_code == 200
@@ -157,3 +161,73 @@ def test_invitation_link_parser_extracts_server_and_token():
 def test_invitation_link_parser_rejects_unsafe_or_invalid_links(link):
     with pytest.raises(ValueError):
         BaseSentinelClient.parse_invitation_link(link)
+
+
+def test_invitation_code_enrolls_once(client, admin):
+    _initialize_server(client, admin)
+    invitation = _create_invitation(client, admin)
+    code = invitation["invitation_code"]
+    assert len(code.replace("-", "")) == 16
+    first = _enroll(client, invitation_code=code)
+    second = _enroll(client, invitation_code=code, hostname="second-workstation")
+    assert first.status_code == 201
+    assert second.status_code == 401
+
+
+def test_invitation_link_and_code_share_single_use_state(client, admin):
+    _initialize_server(client, admin)
+    invitation = _create_invitation(client, admin)
+    first = _enroll(client, invitation["invitation_token"])
+    second = _enroll(client, invitation_code=invitation["invitation_code"], hostname="other-device")
+    assert first.status_code == 201
+    assert second.status_code == 401
+
+
+
+def test_approval_required_enrollment_waits_for_admin_and_then_completes(client, admin):
+    _initialize_server(client, admin)
+    settings = client.put("/api/v1/server/enrollment", headers=admin, json={
+        "enrollment_mode": "approval_required",
+        "connection_password": "",
+    })
+    assert settings.status_code == 200
+
+    invitation = _create_invitation(client, admin)
+    pending = _enroll(client, invitation_code=invitation["invitation_code"])
+    assert pending.status_code == 202
+    assert pending.get_json()["status"] == "pending_approval"
+
+    requests = client.get("/api/v1/server/enrollment/requests", headers=admin)
+    assert requests.status_code == 200
+    request_item = requests.get_json()["items"][0]
+    assert request_item["hostname"] == "invited-workstation"
+    assert request_item["status"] == "pending"
+
+    approved = client.post(
+        f"/api/v1/server/enrollment/requests/{request_item['id']}/approve",
+        headers=admin,
+    )
+    assert approved.status_code == 200
+
+    completed = _enroll(client, invitation_code=invitation["invitation_code"])
+    assert completed.status_code == 201
+    assert completed.get_json()["agent_id"]
+
+
+def test_rejected_enrollment_request_cannot_complete(client, admin):
+    _initialize_server(client, admin)
+    client.put("/api/v1/server/enrollment", headers=admin, json={
+        "enrollment_mode": "approval_required",
+        "connection_password": "",
+    })
+    invitation = _create_invitation(client, admin)
+    pending = _enroll(client, invitation_code=invitation["invitation_code"])
+    assert pending.status_code == 202
+    request_id = pending.get_json()["request_id"]
+
+    rejected = client.post(
+        f"/api/v1/server/enrollment/requests/{request_id}/reject",
+        headers=admin,
+    )
+    assert rejected.status_code == 200
+    assert _enroll(client, invitation_code=invitation["invitation_code"]).status_code == 401

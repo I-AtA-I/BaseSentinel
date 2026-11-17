@@ -39,6 +39,7 @@ async function load() {
             document.getElementById("secret-notice").textContent = "Copy and store this code now. It cannot be retrieved later.";
         }
         await loadInvitations();
+        await loadEnrollmentRequests();
     } catch (error) {
         showMessage(error.message, true);
     }
@@ -136,8 +137,9 @@ document.getElementById("create-invitation").addEventListener("click", async () 
         });
         const link = window.location.origin + "/agent-invite#invite=" + encodeURIComponent(data.invitation_token);
         document.getElementById("invitation-link").value = link;
+        document.getElementById("invitation-code").textContent = data.invitation_code;
         document.getElementById("invitation-result").hidden = false;
-        showMessage("Invitation created. Copy the link now; the token cannot be retrieved later.");
+        showMessage("Invitation created. Copy the link or code now; neither can be retrieved later.");
         await loadInvitations();
     } catch (error) {
         showMessage(error.message, true);
@@ -157,3 +159,57 @@ document.getElementById("copy-invitation").addEventListener("click", async () =>
         showMessage("Select and copy the invitation link manually.");
     }
 });
+
+
+document.getElementById("copy-invitation-code").addEventListener("click", async () => {
+    const code = document.getElementById("invitation-code").textContent;
+    try {
+        await navigator.clipboard.writeText(code);
+        showMessage("Invitation code copied.");
+    } catch (_) {
+        showMessage("Select and copy the invitation code manually.");
+    }
+});
+
+async function loadEnrollmentRequests() {
+    const container = document.getElementById('enrollment-requests-list');
+    try {
+        const data = await api('/server/enrollment/requests?status=pending');
+        const items = data.items || [];
+        container.replaceChildren();
+        if (!items.length) { container.textContent = 'No enrollment requests are waiting for approval.'; return; }
+        items.forEach((item) => {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;justify-content:space-between;gap:16px;align-items:center;padding:14px 0;border-top:1px solid var(--line)';
+            const details = document.createElement('div');
+            const name = document.createElement('strong');
+            name.textContent = item.hostname;
+            const platform = document.createElement('div');
+            platform.className = 'muted';
+            platform.textContent = [item.platform, item.platform_version, item.architecture].filter(Boolean).join(' · ');
+            const metadata = document.createElement('div');
+            metadata.className = 'muted';
+            metadata.textContent = 'Agent ' + item.agent_version + ' · Requested ' + new Date(item.requested_at).toLocaleString() + ' · Expires ' + new Date(item.expires_at).toLocaleString();
+            details.append(name, platform, metadata);
+            const actions = document.createElement('div');
+            actions.style.cssText = 'display:flex;gap:8px;flex-shrink:0';
+            [['Approve', 'approve'], ['Reject', 'reject']].forEach(([label, decision]) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'secondary-button';
+                button.textContent = label;
+                button.addEventListener('click', async () => {
+                    button.disabled = true;
+                    try {
+                        await api('/server/enrollment/requests/' + encodeURIComponent(item.id) + '/' + decision, {method: 'POST'});
+                        showMessage(decision === 'approve' ? 'Enrollment approved. The device owner can retry Connect.' : 'Enrollment request rejected.');
+                        await loadEnrollmentRequests();
+                    } catch (error) { showMessage(error.message, true); button.disabled = false; }
+                });
+                actions.append(button);
+            });
+            row.append(details, actions);
+            container.append(row);
+        });
+    } catch (error) { container.textContent = error.message; }
+}

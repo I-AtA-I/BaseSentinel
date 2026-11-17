@@ -38,8 +38,12 @@
                 <button id="create-invitation" class="secondary-button" type="button" style="margin-top:14px">Create invitation</button>
                 <div id="invitation-result" hidden style="margin-top:16px">
                     <p class="muted">Copy this link and share it with the device owner. Treat it like a temporary password.</p>
+                    <label for="invitation-link">Invitation link</label>
                     <input id="invitation-link" type="text" readonly autocomplete="off">
                     <button id="copy-invitation" class="secondary-button" type="button" style="margin-top:10px">Copy invitation link</button>
+                    <label for="invitation-code" style="display:block;margin-top:18px">Invitation code</label>
+                    <code id="invitation-code" style="display:block;font-size:1.35rem;letter-spacing:.12em;overflow-wrap:anywhere"></code>
+                    <button id="copy-invitation-code" class="secondary-button" type="button" style="margin-top:10px">Copy invitation code</button>
                 </div>
                 <div style="margin-top:22px">
                     <h3>Recent invitations</h3>
@@ -47,9 +51,13 @@
                 </div>
             </section>
             <section class="panel">
+                <div class="panel-heading"><div><h2>Enrollment requests</h2><p class="muted">Review devices waiting for administrator approval.</p></div></div>
+                <div id="enrollment-requests-list" class="muted">Loading requests...</div>
+            </section>
+            <section class="panel">
                 <div class="panel-heading"><div><h2>Connection policy</h2><p class="muted">Control whether new devices can enroll.</p></div></div>
                 <label for="enrollment-mode">New agent enrollment</label>
-                <select id="enrollment-mode"><option value="automatic">Automatic — valid credentials connect immediately</option><option value="disabled">Disabled — reject new devices</option></select>
+                <select id="enrollment-mode"><option value="automatic">Automatic — valid invitations connect immediately</option><option value="approval_required">Approval required — admin must approve each new device</option><option value="disabled">Disabled — reject new devices</option></select>
                 <label for="connection-password" style="display:block;margin-top:18px">Connection password (optional)</label>
                 <input id="connection-password" type="password" autocomplete="new-password" placeholder="Leave blank to remove password">
                 <button id="save-settings" class="secondary-button" type="button" style="margin-top:16px">Save settings</button>

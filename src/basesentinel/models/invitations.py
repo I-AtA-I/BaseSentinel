@@ -15,6 +15,7 @@ class AgentInvitation(db.Model):
         default=uuid.uuid4,
     )
     token_hash = db.Column(String(64), nullable=False)
+    code_hash = db.Column(String(64), nullable=True)
     created_by_user_id = db.Column(
         Uuid(as_uuid=True, native_uuid=False),
         db.ForeignKey(
@@ -33,6 +34,7 @@ class AgentInvitation(db.Model):
 
     __table_args__ = (
         UniqueConstraint("token_hash", name="uq_agent_invitations_token_hash"),
+        UniqueConstraint("code_hash", name="uq_agent_invitations_code_hash"),
         Index("ix_agent_invitations_expires_at", "expires_at"),
         Index("ix_agent_invitations_created_at", "created_at"),
     )

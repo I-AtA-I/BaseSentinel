@@ -94,16 +94,23 @@ class BaseSentinelClient:
         server_url = urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
         return server_url, tokens[0]
 
-    def enroll_with_invitation(self, invitation_token: str, hostname: str,
-                               platform_version: str, architecture: str) -> dict:
-        return self._request("POST", "/api/v1/agents/enroll-invitation", {
-            "invitation_token": invitation_token,
+    def enroll_with_invitation(self, hostname: str, platform_version: str,
+                               architecture: str, invitation_token: str | None = None,
+                               invitation_code: str | None = None) -> dict:
+        if bool(invitation_token) == bool(invitation_code):
+            raise ValueError("Provide exactly one invitation link token or invitation code.")
+        payload = {
             "hostname": hostname,
             "platform": "windows",
             "platform_version": platform_version,
             "architecture": architecture,
             "agent_version": "0.1.0",
-        })
+        }
+        if invitation_token:
+            payload["invitation_token"] = invitation_token
+        else:
+            payload["invitation_code"] = invitation_code
+        return self._request("POST", "/api/v1/agents/enroll-invitation", payload)
 
     def send_event(self, event: dict) -> dict:
         if not self.token:
