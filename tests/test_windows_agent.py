@@ -55,21 +55,25 @@ def test_security_event_collector_normalizes_windows_events(monkeypatch):
     from basesentinel_agent import windows_eventlog
 
     xml = """<Event><EventData><Data Name="TargetUserName">sample</Data><Data Name="IpAddress">192.0.2.10</Data><Data Name="IgnoredField">not-collected</Data></EventData></Event>"""
-    output = [{
-        "Id": 4625,
-        "RecordId": 91,
-        "TimeCreated": "2026-11-17T10:00:00.0000000Z",
-        "MachineName": "WORKSTATION",
-        "Message": "A sign-in attempt failed.",
-        "Xml": xml,
-    }]
+    output = {
+        "LatestRecordId": 91,
+        "Events": [{
+            "Id": 4625,
+            "RecordId": 91,
+            "TimeCreated": "2026-11-17T10:00:00.0000000Z",
+            "MachineName": "WORKSTATION",
+            "Message": "A sign-in attempt failed.",
+            "Xml": xml,
+        }],
+    }
 
     def fake_run(*args, **kwargs):
         return subprocess.CompletedProcess(args[0], 0, json.dumps(output), "")
 
     monkeypatch.setattr(windows_eventlog.subprocess, "run", fake_run)
-    events = windows_eventlog.collect_security_events()
+    events, checkpoint = windows_eventlog.collect_security_events()
 
+    assert checkpoint == 91
     assert len(events) == 1
     event = events[0]
     assert event["category"] == "authentication"
@@ -88,10 +92,13 @@ def test_security_event_collector_handles_empty_log(monkeypatch):
     from basesentinel_agent import windows_eventlog
 
     def fake_run(*args, **kwargs):
-        return subprocess.CompletedProcess(args[0], 0, "[]", "")
+        return subprocess.CompletedProcess(args[0], 0, json.dumps({
+            "LatestRecordId": 250,
+            "Events": [],
+        }), "")
 
     monkeypatch.setattr(windows_eventlog.subprocess, "run", fake_run)
-    assert windows_eventlog.collect_security_events() == []
+    assert windows_eventlog.collect_security_events() == ([], 250)
 
 
 def test_queue_persists_events_and_checkpoint_atomically(tmp_path):
