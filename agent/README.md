@@ -109,3 +109,21 @@ The server can also use **Approval required** mode. A device can submit its invi
 
 Administrators can open **Clients** from the dashboard navigation to view enrolled endpoints, platform and agent versions, last check-in, enrollment time, and current status. Revoking a client disables its agent credentials; historical security events remain available for investigation.
 
+
+## Agent diagnostics and event delivery
+
+The Windows agent GUI now provides **Run diagnostics**, **Collect now**, **Start monitoring**, and **Stop** actions. Its output panel shows collection results, delivery failures, server errors, queue depth, and the Security log checkpoint. Keep the GUI open while continuous monitoring is running; closing it stops the foreground agent process.
+
+Run the same checks from PowerShell:
+
+```powershell
+basesentinel-agent diagnostics
+basesentinel-agent collect --batch-size 50
+basesentinel-agent run --interval 60 --batch-size 50
+```
+
+Diagnostics checks the authenticated server connection, local pending queue, checkpoint, and whether the current Windows user can read the Security event log. It does not send events or change the checkpoint. **Collect now** (or the `collect` command) reads new events, persists them and the checkpoint locally, then attempts to deliver up to the selected batch size. Continuous mode repeats that process and sends an authenticated heartbeat every cycle.
+
+The current collector reads only Windows Security event IDs **4624**, **4625**, **4672**, and **4720**. It does not ingest every Windows event or events from other channels. The Windows account running the agent must have permission to read the Security log. If diagnostics reports access denied, run the agent under an account with the required Security log read permission.
+
+A non-zero pending count means events are still stored locally and have not yet been acknowledged by the server. They remain queued for another delivery attempt. The dashboard currently shows aggregate event counts; the `GET /api/v1/events` endpoint provides individual event records.
