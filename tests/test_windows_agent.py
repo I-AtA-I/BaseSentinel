@@ -199,6 +199,9 @@ def test_run_command_defaults_to_sixty_second_interval():
     collect_args = build_parser().parse_args(["collect"])
     assert collect_args.batch_size == 500
 
+    drain_args = build_parser().parse_args(["drain"])
+    assert drain_args.batch_size == 500
+
 
 @pytest.mark.parametrize("value", ["0", "-1", "nan", "inf", "not-a-number"])
 def test_run_command_rejects_invalid_intervals(value):
@@ -325,3 +328,35 @@ def test_collection_pipeline_keeps_events_queued_when_stop_is_requested(
 
     assert result == (1, 0, 1, 300)
     assert queue.pending() == [event]
+
+
+def test_drain_sends_existing_queue_without_collecting_new_events(
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    from argparse import Namespace
+    from basesentinel_agent import cli
+
+    queue = EventQueue(tmp_path / "events.sqlite3")
+    event = {"event_uid": str(uuid.uuid4()), "event_type": "login.failed"}
+    queue.add(event)
+    delivered = []
+
+    class FakeClient:
+        def send_event(self, queued_event):
+            delivered.append(queued_event)
+            return {"event_uid": queued_event["event_uid"]}
+
+    monkeypatch.setattr(cli, "_client_from_config", lambda: FakeClient())
+    monkeypatch.setattr(cli, "_queue", lambda: queue)
+    monkeypatch.setattr(
+        cli,
+        "collect_security_events",
+        lambda *_args: pytest.fail("Drain must not read the Windows event log."),
+    )
+
+    assert cli.drain(Namespace(batch_size=500)) == 0
+    assert delivered == [event]
+    assert queue.pending() == []
+    assert "Delivered 1 queued event(s); pending 0." in capsys.readouterr().out
