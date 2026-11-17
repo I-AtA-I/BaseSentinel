@@ -64,8 +64,8 @@ class ServerEnrollmentService:
 
     @classmethod
     def update_settings(cls, mode, connection_password=None):
-        if mode not in {"automatic", "disabled"}:
-            raise ValueError("Enrollment mode must be automatic or disabled.")
+        if mode not in {"automatic", "approval_required", "disabled"}:
+            raise ValueError("Enrollment mode must be automatic, approval_required, or disabled.")
         if connection_password is not None:
             if not isinstance(connection_password, str) or len(connection_password) > 256:
                 raise ValueError("Connection password is too long.")
