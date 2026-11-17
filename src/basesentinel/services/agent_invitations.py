@@ -35,6 +35,15 @@ class AgentInvitationService:
         return hmac.new(cls._pepper(), token.encode("utf-8"), hashlib.sha256).hexdigest()
 
     @classmethod
+    def _hash_code(cls, code):
+        if not isinstance(code, str):
+            raise InvalidInvitationError()
+        normalized = code.replace("-", "").replace(" ", "").upper()
+        if len(normalized) != 16 or any(char not in "23456789ABCDEFGHJKMNPQRSTVWXYZ" for char in normalized):
+            raise InvalidInvitationError()
+        return hmac.new(cls._pepper(), normalized.encode("ascii"), hashlib.sha256).hexdigest()
+
+    @classmethod
     def create(cls, created_by_user_id, ttl):
         if not isinstance(ttl, timedelta) or not cls.MIN_TTL <= ttl <= cls.MAX_TTL:
             raise ValueError("Invitation lifetime must be between 5 minutes and 24 hours.")
@@ -47,15 +56,19 @@ class AgentInvitationService:
             raise RuntimeError("New agent enrollment is disabled.")
 
         token = secrets.token_urlsafe(32)
+        alphabet = "23456789ABCDEFGHJKMNPQRSTVWXYZ"
+        raw_code = "".join(secrets.choice(alphabet) for _ in range(16))
+        invitation_code = "-".join(raw_code[index:index + 4] for index in range(0, 16, 4))
         record = AgentInvitation(
             token_hash=cls._hash_token(token),
+            code_hash=cls._hash_code(invitation_code),
             created_by_user_id=user.id,
             created_at=utcnow_naive(),
             expires_at=utcnow_naive() + ttl,
         )
         db.session.add(record)
         db.session.commit()
-        return record, token
+        return record, token, invitation_code
 
     @classmethod
     def list_recent(cls, limit=20):
@@ -82,7 +95,7 @@ class AgentInvitationService:
         return False
 
     @classmethod
-    def enroll(cls, token, hostname, platform, agent_version, platform_version=None, architecture=None):
+    def enroll(cls, token, hostname, platform, agent_version, platform_version=None, architecture=None, invitation_code=None):
         # Validate metadata before consuming the one-time invitation.
         hostname = EnrollmentService._validate_text(hostname, "hostname", 255, required=True)
         platform = EnrollmentService._validate_text(platform, "platform", 24, required=True).lower()
@@ -97,11 +110,16 @@ class AgentInvitationService:
         if settings is None or settings.enrollment_mode != "automatic":
             raise InvalidInvitationError()
 
-        token_hash = cls._hash_token(token)
+        if token:
+            credential_filter = AgentInvitation.token_hash == cls._hash_token(token)
+        elif invitation_code:
+            credential_filter = AgentInvitation.code_hash == cls._hash_code(invitation_code)
+        else:
+            raise InvalidInvitationError()
         now = utcnow_naive()
         invitation = db.session.scalar(
             select(AgentInvitation)
-            .where(AgentInvitation.token_hash == token_hash)
+            .where(credential_filter)
             .with_for_update()
         )
         if (
