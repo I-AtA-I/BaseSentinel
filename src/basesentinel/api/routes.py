@@ -1378,7 +1378,7 @@ def create_agent_invitation():
             400,
         )
     try:
-        record, token = AgentInvitationService.create(
+        record, token, invitation_code = AgentInvitationService.create(
             g.current_user.id,
             timedelta(minutes=ttl_minutes),
         )
@@ -1389,6 +1389,7 @@ def create_agent_invitation():
     response = jsonify({
         "id": str(record.id),
         "invitation_token": token,
+        "invitation_code": invitation_code,
         "created_at": _serialize_datetime(record.created_at),
         "expires_at": _serialize_datetime(record.expires_at),
     })
@@ -1415,7 +1416,7 @@ def enroll_agent_with_invitation():
     if not isinstance(data, dict):
         return _invalid_request_response()
     allowed = {
-        "invitation_token", "hostname", "platform", "agent_version",
+        "invitation_token", "invitation_code", "hostname", "platform", "agent_version",
         "platform_version", "architecture",
     }
     if set(data) - allowed:
@@ -1427,6 +1428,7 @@ def enroll_agent_with_invitation():
     try:
         result = AgentInvitationService.enroll(
             token=data.get("invitation_token"),
+            invitation_code=data.get("invitation_code"),
             hostname=data.get("hostname"),
             platform=data.get("platform"),
             agent_version=data.get("agent_version"),
