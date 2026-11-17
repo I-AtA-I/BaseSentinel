@@ -107,7 +107,7 @@ def collect_security_events(last_record_id: int = 0) -> tuple[list[dict], int]:
         if not message:
             message = f"Windows Security event {item['Id']}"
         events.append({
-            "event_uid": str(uuid.uuid5(uuid.NAMESPACE_URL, f"windows-security:{computer}:{record_id}")),
+            "event_uid": str(uuid.uuid5(uuid.NAMESPACE_URL, f"windows-security:{computer}:{record_id}:{item['Id']}:{item['TimeCreated']}")),
             "schema_version": 1,
             "category": category,
             "event_type": event_type,
