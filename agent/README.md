@@ -98,3 +98,8 @@ The server requires `PAIRING_CODE_PEPPER` to be configured with at least 32 byte
 Administrators can create single-use enrollment invitations from **Agent enrollment** in the dashboard. Choose an expiry between 5 minutes and 24 hours, then share either the generated HTTPS invitation link or the human-readable invitation code with the device owner. Both represent the same one-time invitation: using either one invalidates the other. The random link token and invitation code are stored only as keyed hashes, shown only when created, and can be revoked before use. The manual code is 16 ambiguity-resistant Base32-style characters grouped for readability.
 
 On Windows, open `basesentinel-agent-gui`. Either paste the complete link into **Invitation link**, or select **Invitation code** and enter the server URL plus the code. The link contains the server address and a temporary token in its URL fragment; browsers do not send the fragment to the server in HTTP requests. The client exchanges the invitation for an individual agent credential. Invitations work while server enrollment mode is set to **Automatic**; disabled enrollment rejects them. Existing enrolled agents are not affected.
+
+
+### Approval-required enrollment
+
+The server can also use **Approval required** mode. A device can submit its invitation, but it does not receive an agent credential immediately. The request appears in **Agent enrollment → Enrollment requests** with hostname and platform metadata. An administrator can approve or reject it. After approval, the device owner clicks **Connect device** again with the same invitation link or code to complete enrollment. Rejected requests cannot be reused. Invitations still expire and can be revoked while awaiting review.
