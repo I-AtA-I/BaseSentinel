@@ -141,3 +141,27 @@ def test_disabled_server_rejects_new_agent_enrollment(client, admin):
         "architecture": "AMD64",
     })
     assert response.status_code == 401
+
+
+def test_policy_only_update_preserves_legacy_connection_password(client, admin, app):
+    headers = _login(client)
+    first = client.put("/api/v1/server/enrollment", headers=headers, json={
+        "enrollment_mode": "automatic",
+        "connection_password": "existing-legacy-password",
+    })
+    assert first.status_code == 200
+
+    from basesentinel.models import ServerSettings
+    with app.app_context():
+        settings = db.session.get(ServerSettings, 1)
+        original_hash = settings.connection_password_hash
+
+    updated = client.put("/api/v1/server/enrollment", headers=headers, json={
+        "enrollment_mode": "approval_required",
+    })
+    assert updated.status_code == 200
+    assert updated.get_json() == {"enrollment_mode": "approval_required"}
+
+    with app.app_context():
+        settings = db.session.get(ServerSettings, 1)
+        assert settings.connection_password_hash == original_hash
