@@ -8,13 +8,19 @@ from sqlalchemy import select
 
 from basesentinel import db
 from basesentinel.core.security import generate_pairing_code, hash_pairing_code
-from basesentinel.models import AgentInvitation, PairingCode, ServerSettings, User
+from basesentinel.models import AgentEnrollmentRequest, AgentInvitation, PairingCode, ServerSettings, User
 from basesentinel.models.base import utcnow_naive
 from basesentinel.services.enrollment import EnrollmentService
 
 
 class InvalidInvitationError(Exception):
     pass
+
+
+class EnrollmentPending(Exception):
+    def __init__(self, request_id):
+        self.request_id = str(request_id)
+        super().__init__("Enrollment is waiting for administrator approval.")
 
 
 class AgentInvitationService:
@@ -52,7 +58,7 @@ class AgentInvitationService:
         if user is None or not user.is_active or user.role != "admin":
             raise PermissionError("Administrator access is required.")
         settings = db.session.get(ServerSettings, 1)
-        if settings is None or settings.enrollment_mode != "automatic":
+        if settings is None or settings.enrollment_mode not in {"automatic", "approval_required"}:
             raise RuntimeError("New agent enrollment is disabled.")
 
         token = secrets.token_urlsafe(32)
@@ -69,6 +75,38 @@ class AgentInvitationService:
         db.session.add(record)
         db.session.commit()
         return record, token, invitation_code
+
+    @classmethod
+    def list_requests(cls, status="pending", limit=100):
+        query = select(AgentEnrollmentRequest).order_by(
+            AgentEnrollmentRequest.requested_at.desc()
+        ).limit(limit)
+        if status:
+            query = query.where(AgentEnrollmentRequest.status == status)
+        return db.session.scalars(query).all()
+
+    @classmethod
+    def review_request(cls, request_id, reviewer_id, decision):
+        if decision not in {"approved", "rejected"}:
+            raise ValueError("Invalid enrollment decision.")
+        record = db.session.scalar(
+            select(AgentEnrollmentRequest)
+            .where(AgentEnrollmentRequest.id == request_id)
+            .with_for_update()
+        )
+        if record is None:
+            return None
+        if record.status != "pending":
+            return False
+        invitation = db.session.get(AgentInvitation, record.invitation_id)
+        if invitation is None or invitation.expires_at <= utcnow_naive() or invitation.revoked_at is not None:
+            record.status = "expired"
+        else:
+            record.status = decision
+        record.reviewed_by_user_id = reviewer_id
+        record.reviewed_at = utcnow_naive()
+        db.session.commit()
+        return record.status == decision
 
     @classmethod
     def list_recent(cls, limit=20):
@@ -107,7 +145,7 @@ class AgentInvitationService:
             raise ValueError("Unsupported platform.")
 
         settings = db.session.get(ServerSettings, 1)
-        if settings is None or settings.enrollment_mode != "automatic":
+        if settings is None or settings.enrollment_mode not in {"automatic", "approval_required"}:
             raise InvalidInvitationError()
 
         if token:
@@ -134,6 +172,37 @@ class AgentInvitationService:
         if creator is None or not creator.is_active or creator.role != "admin":
             raise InvalidInvitationError()
 
+        enrollment_request = db.session.scalar(
+            select(AgentEnrollmentRequest)
+            .where(AgentEnrollmentRequest.invitation_id == invitation.id)
+            .with_for_update()
+        )
+        if settings.enrollment_mode == "approval_required":
+            if enrollment_request is None:
+                enrollment_request = AgentEnrollmentRequest(
+                    invitation_id=invitation.id,
+                    hostname=hostname,
+                    platform=platform,
+                    agent_version=agent_version,
+                    platform_version=platform_version,
+                    architecture=architecture,
+                    status="pending",
+                    requested_at=now,
+                )
+                db.session.add(enrollment_request)
+                db.session.commit()
+                raise EnrollmentPending(enrollment_request.id)
+            if enrollment_request.status == "pending":
+                raise EnrollmentPending(enrollment_request.id)
+            if enrollment_request.status != "approved":
+                raise InvalidInvitationError()
+            if (
+                enrollment_request.hostname != hostname
+                or enrollment_request.platform != platform
+                or enrollment_request.agent_version != agent_version
+            ):
+                raise InvalidInvitationError()
+
         code = generate_pairing_code()
         pepper = current_app.config.get("PAIRING_CODE_PEPPER")
         pairing = PairingCode(
@@ -147,7 +216,7 @@ class AgentInvitationService:
         db.session.commit()
 
         try:
-            return EnrollmentService.enroll(
+            result = EnrollmentService.enroll(
                 pairing_code=code,
                 hostname=hostname,
                 platform=platform,
@@ -155,6 +224,10 @@ class AgentInvitationService:
                 platform_version=platform_version,
                 architecture=architecture,
             )
+            if enrollment_request is not None:
+                enrollment_request.status = "completed"
+                db.session.commit()
+            return result
         except Exception:
             db.session.rollback()
             # The invitation remains consumed. Revoke its temporary pairing
