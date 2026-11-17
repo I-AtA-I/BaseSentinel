@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#090a0c">
+    <title>Sign in | BaseSentinel</title>
+    <link rel="stylesheet" href="{{ url_for('web.static', filename='css/dashboard.css') }}">
+    <script>
+        (() => {
+            try {
+                const saved = localStorage.getItem("basesentinel_theme");
+                if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+            } catch (_) {}
+        })();
+    </script>
+</head>
+<body class="login-page">
+    <main class="login-wrap">
+        <section class="login-aside">
+            <div class="login-brand">
+                <span class="brand-mark">B</span>
+                <span><strong>BASESENTINEL</strong><small>LOCAL SECURITY SYSTEM</small></span>
+            </div>
+            <div class="login-aside-copy">
+                <p class="eyebrow">CONTROL / ACCESS POINT 01</p>
+                <h1>Know what<br>moves across<br>your network<span style="color:var(--accent)">.</span></h1>
+                <p>Local-first security monitoring, event visibility and alert management.</p>
+            </div>
+            <div class="login-aside-foot">PRIVATE NETWORK // CONTROLLED ACCESS</div>
+        </section>
+        <section class="login-card">
+            <button id="theme-toggle" class="theme-toggle login-theme" type="button" aria-label="Switch theme"><span class="theme-symbol">◐</span><span class="theme-label">LIGHT MODE</span></button>
+            <p class="eyebrow">AUTHENTICATION REQUIRED</p>
+            <h2>Sign in to BaseSentinel</h2>
+            <p class="muted">Enter your operator credentials to access the local instance.</p>
+            <form id="login-form">
+                <label for="username">Operator username</label>
+                <input id="username" name="username" type="text" autocomplete="username" required maxlength="128">
+                <label for="password">Password</label>
+                <input id="password" name="password" type="password" autocomplete="current-password" required>
+                <p id="login-error" class="form-error" role="alert"></p>
+                <button id="login-button" class="primary-button" type="submit">Authenticate <span aria-hidden="true">→</span></button>
+            </form>
+            <p class="login-footer">BASESENTINEL // LOCAL SECURITY MONITORING</p>
+        </section>
+    </main>
+    <script>window.BASESENTINEL_PAGE = "login";</script>
+    <script src="{{ url_for('web.static', filename='js/dashboard.js') }}" defer></script>
+</body>
+</html>

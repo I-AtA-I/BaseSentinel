@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#090a0c">
+    <title>Overview | BaseSentinel</title>
+    <link rel="stylesheet" href="{{ url_for('web.static', filename='css/dashboard.css') }}">
+    <script>
+        (() => {
+            try {
+                const saved = localStorage.getItem("basesentinel_theme");
+                if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+            } catch (_) {}
+        })();
+    </script>
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <a class="brand" href="/">
+                <span class="brand-mark">B</span>
+                <span><strong>BASESENTINEL</strong><small>LOCAL SECURITY SYSTEM</small></span>
+            </a>
+            <div class="sidebar-section">
+                <span class="sidebar-label">OPERATIONS / 01</span>
+                <a class="nav-link active" href="/"><span class="nav-icon">◈</span> Overview</a>
+                <a class="nav-link" href="#timeline"><span class="nav-icon">⌁</span> Event timeline</a>
+                <a class="nav-link" href="#alerts"><span class="nav-icon">△</span> Alerts</a>
+                <a class="nav-link" href="#agents"><span class="nav-icon">▦</span> Agents</a>
+            </div>
+            <div class="sidebar-bottom">
+                <div class="connection-indicator"><span class="status-dot"></span><span>Local instance / connected</span></div>
+                <div class="sidebar-version">BS // BUILD 0.1.0</div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">SECURITY OPERATIONS / OVERVIEW</p>
+                    <h1>System overview<span style="color:var(--accent)">.</span></h1>
+                </div>
+                <div class="topbar-right">
+                    <div class="system-status"><span class="status-dot"></span><span>System connected</span></div>
+                    <div class="user-menu">
+                        <span id="user-initial" class="user-avatar">U</span>
+                        <div><strong id="current-username">Loading</strong><small id="current-role">—</small></div>
+                        <button id="logout-button" class="text-button" type="button">Sign out ↗</button>
+                    </div>
+                </div>
+            </header>
+
+            <section class="dashboard-toolbar">
+                <div><span class="muted">Telemetry window</span><span id="last-updated" class="last-updated">Waiting for data...</span></div>
+                <div class="toolbar-actions">
+                    <select id="period-select" aria-label="Analytics period">
+                        <option value="24">LAST 24 HOURS</option>
+                        <option value="168">LAST 7 DAYS</option>
+                        <option value="720">LAST 30 DAYS</option>
+                    </select>
+                    <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch theme"><span class="theme-symbol">◐</span><span class="theme-label">LIGHT MODE</span></button>
+                    <button id="refresh-button" class="secondary-button" type="button">↻ Refresh</button>
+                </div>
+            </section>
+
+            <div id="dashboard-error" class="dashboard-error" role="alert" hidden></div>
+
+            <section class="metric-grid">
+                <article class="metric-card">
+                    <div class="metric-heading"><span>Total events</span><span class="metric-icon">⌁</span></div>
+                    <strong id="metric-events" class="metric-value">—</strong>
+                    <span class="metric-description">Within selected period</span>
+                </article>
+                <article class="metric-card">
+                    <div class="metric-heading"><span>Total alerts</span><span class="metric-icon alert-icon">△</span></div>
+                    <strong id="metric-alerts" class="metric-value">—</strong>
+                    <span class="metric-description">Observed detections</span>
+                </article>
+                <article class="metric-card">
+                    <div class="metric-heading"><span>Active agents</span><span class="metric-icon agent-icon">▦</span></div>
+                    <strong id="metric-agents" class="metric-value">—</strong>
+                    <span id="metric-agent-description" class="metric-description">Registered agents</span>
+                </article>
+                <article class="metric-card">
+                    <div class="metric-heading"><span>Open alerts</span><span class="metric-icon warning-icon">!</span></div>
+                    <strong id="metric-open-alerts" class="metric-value">—</strong>
+                    <span class="metric-description">Require attention</span>
+                </article>
+            </section>
+
+            <section id="timeline" class="panel timeline-panel">
+                <div class="panel-heading">
+                    <div><h2>Event timeline</h2><p class="muted">Inbound telemetry / detections over time</p></div>
+                    <span id="timeline-granularity" class="panel-tag">—</span>
+                </div>
+                <div class="chart-legend"><span><i class="legend-dot events-legend"></i> Events</span><span><i class="legend-dot alerts-legend"></i> Alerts created</span></div>
+                <div id="timeline-chart" class="chart-container"><div class="chart-placeholder">Loading timeline...</div></div>
+            </section>
+
+            <section class="content-grid">
+                <article class="panel">
+                    <div class="panel-heading"><div><h2>Severity distribution</h2><p class="muted">Event volume by severity level</p></div></div>
+                    <div id="severity-chart" class="severity-chart"><div class="chart-placeholder">Loading severity data...</div></div>
+                </article>
+                <article class="panel">
+                    <div class="panel-heading"><div><h2>Event categories</h2><p class="muted">Telemetry classification</p></div></div>
+                    <div id="category-chart" class="category-chart"><div class="chart-placeholder">Loading category data...</div></div>
+                </article>
+            </section>
+
+            <section id="alerts" class="panel">
+                <div class="panel-heading"><div><h2>Recent alerts</h2><p class="muted">Latest security detections</p></div><a class="panel-link" href="#alerts">View all ↗</a></div>
+                <div class="table-scroll">
+                    <table>
+                        <thead><tr><th>Alert</th><th>Severity</th><th>Status</th><th>Occurrences</th><th>Last seen</th><th>Actions</th></tr></thead>
+                        <tbody id="alerts-table"><tr><td colspan="6" class="table-empty">Loading alerts...</td></tr></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="agents" class="panel">
+                <div class="panel-heading"><div><h2>Top agents</h2><p class="muted">Ranked by event volume</p></div></div>
+                <div id="agents-list" class="agents-list"><div class="chart-placeholder">Loading agents...</div></div>
+            </section>
+
+            <footer class="page-footer"><span>BASESENTINEL / LOCAL INSTANCE</span><span>Network visibility. No cloud dependency.</span></footer>
+        </main>
+    </div>
+    <script>window.BASESENTINEL_PAGE = "dashboard";</script>
+    <script src="{{ url_for('web.static', filename='js/dashboard.js') }}" defer></script>
+</body>
+</html>
