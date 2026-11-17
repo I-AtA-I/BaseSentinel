@@ -115,7 +115,7 @@ def ingest(agent_id, occurred_at, severity):
 @pytest.fixture
 def seeded_timeline(app, users):
     with app.app_context():
-        base = utcnow_naive().replace(second=0, microsecond=0)
+        base = utcnow_naive().replace(minute=0, second=0, microsecond=0)
 
         first_agent = create_agent("Timeline Workstation One")
         second_agent = create_agent("Timeline Workstation Two")
