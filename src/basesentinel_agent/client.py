@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 
@@ -65,6 +65,39 @@ class BaseSentinelClient:
             "server_id": server_id,
             "server_secret": server_secret,
             "connection_password": connection_password or None,
+            "hostname": hostname,
+            "platform": "windows",
+            "platform_version": platform_version,
+            "architecture": architecture,
+            "agent_version": "0.1.0",
+        })
+
+    @staticmethod
+    def parse_invitation_link(invitation_link: str) -> tuple[str, str]:
+        if not isinstance(invitation_link, str) or len(invitation_link) > 4096:
+            raise ValueError("Invalid invitation link.")
+        parsed = urlsplit(invitation_link.strip())
+        local_hosts = {"localhost", "127.0.0.1", "::1"}
+        if parsed.scheme != "https" and not (
+            parsed.scheme == "http" and parsed.hostname in local_hosts
+        ):
+            raise ValueError("Invitation links must use HTTPS.")
+        if (
+            not parsed.netloc or parsed.username or parsed.password
+            or parsed.query or parsed.path.rstrip("/") != "/agent-invite"
+        ):
+            raise ValueError("Invalid BaseSentinel invitation link.")
+        fragment = parse_qs(parsed.fragment, strict_parsing=True)
+        tokens = fragment.get("invite", [])
+        if len(tokens) != 1 or not tokens[0] or len(tokens[0]) > 256:
+            raise ValueError("Invitation link does not contain a valid invitation.")
+        server_url = urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+        return server_url, tokens[0]
+
+    def enroll_with_invitation(self, invitation_token: str, hostname: str,
+                               platform_version: str, architecture: str) -> dict:
+        return self._request("POST", "/api/v1/agents/enroll-invitation", {
+            "invitation_token": invitation_token,
             "hostname": hostname,
             "platform": "windows",
             "platform_version": platform_version,
