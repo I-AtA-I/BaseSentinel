@@ -28,7 +28,7 @@ from basesentinel.services.sessions import UserSessionService
 from basesentinel.services.users import UserService
 from basesentinel.services.pairings import PairingService
 from basesentinel.services.server_enrollment import ServerEnrollmentService, ServerAccessError
-from basesentinel.services.agent_invitations import AgentInvitationService, InvalidInvitationError
+from basesentinel.services.agent_invitations import AgentInvitationService, EnrollmentPending, InvalidInvitationError
 from basesentinel.services.enrollment import (EnrollmentService, InvalidPairingCodeError, AssetAlreadyEnrolledError, EnrollmentError)
 from werkzeug.exceptions import RequestEntityTooLarge
 
@@ -1410,6 +1410,55 @@ def revoke_agent_invitation(invitation_id):
     return jsonify({"id": str(parsed_id), "revoked": bool(result)}), 200
 
 
+@api.get("/server/enrollment/requests")
+@require_user
+@require_role("admin")
+def list_agent_enrollment_requests():
+    records = AgentInvitationService.list_requests(status=request.args.get("status", "pending"))
+    response = jsonify({
+        "items": [{
+            "id": str(item.id),
+            "hostname": item.hostname,
+            "platform": item.platform,
+            "platform_version": item.platform_version,
+            "architecture": item.architecture,
+            "agent_version": item.agent_version,
+            "status": item.status,
+            "requested_at": _serialize_datetime(item.requested_at),
+            "reviewed_at": _serialize_datetime(item.reviewed_at),
+            "expires_at": _serialize_datetime(item.invitation.expires_at),
+        } for item in records],
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response, 200
+
+@api.post("/server/enrollment/requests/<request_id>/approve")
+@require_user
+@require_role("admin")
+def approve_agent_enrollment_request(request_id):
+    parsed_id = _parse_uuid(request_id)
+    if parsed_id is None:
+        return _error_response("invalid_request_id", "Invalid enrollment request ID.", 400)
+    result = AgentInvitationService.review_request(parsed_id, g.current_user.id, "approved")
+    if result is None:
+        return _error_response("request_not_found", "Enrollment request not found.", 404)
+    if not result:
+        return _error_response("request_unavailable", "Enrollment request is no longer pending or its invitation expired.", 409)
+    return jsonify({"id": str(parsed_id), "status": "approved"}), 200
+
+@api.post("/server/enrollment/requests/<request_id>/reject")
+@require_user
+@require_role("admin")
+def reject_agent_enrollment_request(request_id):
+    parsed_id = _parse_uuid(request_id)
+    if parsed_id is None:
+        return _error_response("invalid_request_id", "Invalid enrollment request ID.", 400)
+    result = AgentInvitationService.review_request(parsed_id, g.current_user.id, "rejected")
+    if result is None:
+        return _error_response("request_not_found", "Enrollment request not found.", 404)
+    if not result:
+        return _error_response("request_unavailable", "Enrollment request is no longer pending or its invitation expired.", 409)
+    return jsonify({"id": str(parsed_id), "status": "rejected"}), 200
 @api.post("/agents/enroll-invitation")
 def enroll_agent_with_invitation():
     data = request.get_json(silent=True)
@@ -1435,6 +1484,14 @@ def enroll_agent_with_invitation():
             platform_version=data.get("platform_version"),
             architecture=data.get("architecture"),
         )
+    except EnrollmentPending as pending:
+        response = jsonify({
+            "status": "pending_approval",
+            "request_id": pending.request_id,
+            "message": "Enrollment request is waiting for administrator approval. Retry Connect after approval.",
+        })
+        response.headers["Cache-Control"] = "no-store"
+        return response, 202
     except InvalidInvitationError:
         return _error_response(
             "invalid_invitation",
