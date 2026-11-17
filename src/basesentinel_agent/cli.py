@@ -57,6 +57,8 @@ def _deliver_pending(
             continue
         queue.acknowledge(event["event_uid"])
         sent += 1
+        if sent % 50 == 0:
+            print(f"Delivery progress: acknowledged {sent} event(s) in this batch.")
 
     return sent, len(queue)
 
