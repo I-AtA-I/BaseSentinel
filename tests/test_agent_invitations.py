@@ -1,4 +1,5 @@
 import pytest
+from uuid import UUID
 
 from basesentinel import create_app, db
 from basesentinel.models import AgentInvitation
@@ -77,7 +78,7 @@ def test_invitation_token_is_only_returned_once_and_only_hash_is_stored(client, 
     assert created["invitation_token"]
     assert created["expires_at"]
     with app.app_context():
-        record = db.session.get(AgentInvitation, created["id"])
+        record = db.session.get(AgentInvitation, UUID(created["id"]))
         assert record.token_hash != created["invitation_token"]
         assert len(record.token_hash) == 64
 
