@@ -103,3 +103,9 @@ On Windows, open `basesentinel-agent-gui`. Either paste the complete link into *
 ### Approval-required enrollment
 
 The server can also use **Approval required** mode. A device can submit its invitation, but it does not receive an agent credential immediately. The request appears in **Agent enrollment → Enrollment requests** with hostname and platform metadata. An administrator can approve or reject it. After approval, the device owner clicks **Connect device** again with the same invitation link or code to complete enrollment. Rejected requests cannot be reused. Invitations still expire and can be revoked while awaiting review.
+
+
+## Client overview
+
+Administrators can open **Clients** from the dashboard navigation to view enrolled endpoints, platform and agent versions, last check-in, enrollment time, and current status. Revoking a client disables its agent credentials; historical security events remain available for investigation.
+
