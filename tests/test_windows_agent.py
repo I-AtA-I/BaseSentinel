@@ -154,7 +154,8 @@ def test_security_event_collector_uses_record_checkpoint(monkeypatch):
     monkeypatch.setattr(windows_eventlog.subprocess, "run", fake_run)
     events, checkpoint = windows_eventlog.collect_security_events(80)
 
-    assert "EventRecordID > 80" in captured["script"]
+    assert "$checkpoint = 80" in captured["script"]
+    assert "EventRecordID > $checkpoint" in captured["script"]
     assert checkpoint == 100
     assert len(events) == 1
     assert events[0]["event_type"] == "login.failed"
