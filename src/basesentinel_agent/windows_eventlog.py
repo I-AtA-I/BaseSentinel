@@ -18,21 +18,27 @@ _ALLOWED_EVENT_FIELDS = {
     "LogonType", "ProcessName", "TargetDomainName", "SubjectDomainName",
     "Status", "SubStatus", "PrivilegeList",
 }
+_MAX_BATCH = 1000
 
-# Fixed query and output fields: no user-provided text is interpolated into PowerShell.
+# The only interpolated value is a validated integer Windows EventRecordID.
 _POWERSHELL = r"""
-$events = @(Get-WinEvent -FilterHashtable @{ LogName = 'Security'; Id = @(4624,4625,4672,4720); StartTime = (Get-Date).AddMinutes(-10) } -MaxEvents 100 -ErrorAction SilentlyContinue)
-$result = @($events | ForEach-Object {
-    [pscustomobject]@{
+$checkpoint = {record_id}
+$latest = Get-WinEvent -LogName 'Security' -MaxEvents 1 -ErrorAction SilentlyContinue
+$latestId = if ($null -eq $latest) {{ 0 }} else {{ [long]$latest.RecordId }}
+if ($checkpoint -gt $latestId) {{ $checkpoint = 0 }}
+$xpath = "*[System[(EventID=4624 or EventID=4625 or EventID=4672 or EventID=4720) and (EventRecordID > $checkpoint)]]"
+$events = @(Get-WinEvent -LogName 'Security' -FilterXPath $xpath -Oldest -MaxEvents {_max_batch} -ErrorAction SilentlyContinue)
+$result = @($events | ForEach-Object {{
+    [pscustomobject]@{{
         Id = $_.Id
         RecordId = $_.RecordId
         TimeCreated = $_.TimeCreated.ToUniversalTime().ToString('o')
         MachineName = $_.MachineName
         Message = $_.Message
         Xml = $_.ToXml()
-    }
-})
-ConvertTo-Json -InputObject $result -Depth 4 -Compress
+    }}
+}})
+[pscustomobject]@{{ LatestRecordId = $latestId; Events = $result }} | ConvertTo-Json -Depth 5 -Compress
 """
 
 
@@ -46,15 +52,19 @@ def _event_data(xml_text: str) -> dict:
     return values
 
 
-def collect_security_events() -> list[dict]:
-    """Read a small allowlist of Windows Security events using Get-WinEvent."""
+def collect_security_events(last_record_id: int = 0) -> tuple[list[dict], int]:
+    """Read the next ordered batch of allowlisted Security events."""
+    if type(last_record_id) is not int or last_record_id < 0:
+        raise ValueError("Invalid Windows event record checkpoint.")
+
+    script = _POWERSHELL.format(record_id=last_record_id, _max_batch=_MAX_BATCH)
     result = subprocess.run(
-        ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", _POWERSHELL],
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
         capture_output=True,
         text=True,
         encoding="utf-8",
         errors="replace",
-        timeout=30,
+        timeout=45,
         check=False,
     )
     if result.returncode != 0:
@@ -67,15 +77,17 @@ def collect_security_events() -> list[dict]:
         raw = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         raise RuntimeError("Windows event log returned invalid data.") from exc
-    if raw is None:
-        return []
-    if isinstance(raw, dict):
-        raw = [raw]
-    if not isinstance(raw, list):
+    if not isinstance(raw, dict) or not isinstance(raw.get("Events"), list):
         raise RuntimeError("Windows event log returned an unexpected response.")
 
+    try:
+        latest_record_id = max(0, int(raw.get("LatestRecordId") or 0))
+    except (TypeError, ValueError):
+        raise RuntimeError("Windows event log returned an invalid checkpoint.") from None
+
     events = []
-    for item in raw:
+    record_ids = []
+    for item in raw["Events"]:
         if not isinstance(item, dict) or item.get("Id") not in _EVENT_MAP:
             continue
         category, event_type, severity = _EVENT_MAP[item["Id"]]
@@ -84,16 +96,18 @@ def collect_security_events() -> list[dict]:
         if record_id is None:
             continue
         try:
+            record_id = int(record_id)
             occurred_at = datetime.fromisoformat(item["TimeCreated"].replace("Z", "+00:00"))
             event_data = _event_data(item["Xml"])
         except (KeyError, ValueError, ET.ParseError, TypeError):
             continue
-        event_data.update({"record_id": int(record_id), "computer": computer})
+        record_ids.append(record_id)
+        event_data.update({"record_id": record_id, "computer": computer})
         message = str(item.get("Message") or f"Windows Security event {item['Id']}")[:4096].strip()
         if not message:
             message = f"Windows Security event {item['Id']}"
         events.append({
-            "event_uid": str(uuid.uuid5(uuid.NAMESPACE_URL, f"windows-security:{computer}:{record_id}")),
+            "event_uid": str(uuid.uuid5(uuid.NAMESPACE_URL, f"windows-security:{computer}:{record_id}:{item['Id']}:{item['TimeCreated']}")),
             "schema_version": 1,
             "category": category,
             "event_type": event_type,
@@ -104,4 +118,10 @@ def collect_security_events() -> list[dict]:
             "event_data": event_data,
             "occurred_at": occurred_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
         })
-    return events
+
+    if len(raw["Events"]) >= _MAX_BATCH and record_ids:
+        next_checkpoint = max(record_ids)
+    else:
+        # A short page means all matching events up to the current log tail were read.
+        next_checkpoint = latest_record_id
+    return events, next_checkpoint

@@ -35,9 +35,9 @@ def collect(args) -> int:
     client = BaseSentinelClient(config["server_url"], config["token"])
     queue = _queue()
 
-    discovered = collect_security_events()
-    for event in discovered:
-        queue.add(event)
+    checkpoint = queue.security_checkpoint()
+    discovered, next_checkpoint = collect_security_events(checkpoint)
+    queue.add_batch_and_checkpoint(discovered, next_checkpoint)
 
     sent = 0
     for event in queue.pending(limit=args.batch_size):
@@ -52,7 +52,10 @@ def collect(args) -> int:
         queue.acknowledge(event["event_uid"])
         sent += 1
 
-    print(f"Collected {len(discovered)} event(s); delivered {sent}; pending {len(queue)}.")
+    print(
+        f"Collected {len(discovered)} event(s); delivered {sent}; "
+        f"pending {len(queue)}; Security log checkpoint {next_checkpoint}."
+    )
     return 0
 
 

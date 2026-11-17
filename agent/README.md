@@ -45,6 +45,6 @@ basesentinel-agent status
 ## Scope and limitations
 
 - Collection is manual; there is no Windows service, scheduled task, auto-start, remote command execution, or stealth behavior.
-- The collector currently reads a rolling ten-minute window and relies on server-side event de-duplication. The next iteration should add a local record-ID checkpoint to avoid gaps during long outages and reduce repeated reads.
+- The collector stores a Windows Security EventRecordID checkpoint alongside queued events in one SQLite transaction. It reads ordered batches of up to 1,000 matching records, so backlogs can be drained over repeated runs without relying on a short time window. If the Windows Security log is cleared and its record ID resets below the saved checkpoint, collection restarts from the beginning of the retained log.
 - Run enrollment and collection as the same Windows user so DPAPI can decrypt the stored credential.
 - Treat event messages and event data as security telemetry; review retention and access controls on the SIEM server.
