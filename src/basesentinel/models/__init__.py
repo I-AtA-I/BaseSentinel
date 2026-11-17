@@ -17,6 +17,7 @@ from basesentinel.models.agents import (
 )
 from basesentinel.models.server_settings import ServerSettings
 from basesentinel.models.invitations import AgentInvitation
+from basesentinel.models.enrollment_requests import AgentEnrollmentRequest
 
 __all__ = [
     "Asset",
@@ -28,6 +29,7 @@ __all__ = [
     "PairingCode",
     "ServerSettings",
     "AgentInvitation",
+    "AgentEnrollmentRequest",
     "SecurityEvent",
     "UserSession",
     "Alert",
