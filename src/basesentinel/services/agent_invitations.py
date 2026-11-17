@@ -177,6 +177,8 @@ class AgentInvitationService:
             .where(AgentEnrollmentRequest.invitation_id == invitation.id)
             .with_for_update()
         )
+        if enrollment_request is not None and enrollment_request.status in {"rejected", "expired", "completed"}:
+            raise InvalidInvitationError()
         if settings.enrollment_mode == "approval_required":
             if enrollment_request is None:
                 enrollment_request = AgentEnrollmentRequest(
