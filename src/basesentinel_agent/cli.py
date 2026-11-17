@@ -221,7 +221,7 @@ def run(args) -> int:
     except KeyboardInterrupt:
         pass
 
-    print("\\nBaseSentinel agent stopped.")
+    print("\nBaseSentinel agent stopped.")
     return 0
 
 
