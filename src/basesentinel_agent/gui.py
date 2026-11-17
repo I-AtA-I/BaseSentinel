@@ -433,6 +433,15 @@ class AgentWindow:
             message,
             re.IGNORECASE,
         )
+        progress_match = re.search(
+            r"Delivery progress: acknowledged (\\d+) event\\(s\\)",
+            message,
+            re.IGNORECASE,
+        )
+        if progress_match:
+            self.metrics.set(
+                f"Delivery progress: {progress_match.group(1)} acknowledged in this batch"
+            )
         if drain_match:
             delivered, pending = drain_match.groups()
             self.metrics.set(
