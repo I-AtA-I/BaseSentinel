@@ -429,7 +429,7 @@ class AgentWindow:
             self.status.set("Windows Security event log reported an error.")
 
         drain_match = re.search(
-            r"Delivered (\\d+) queued event\\(s\\); pending (\\d+)\\.",
+            r"Delivered (\d+) queued event\(s\); pending (\d+)\.",
             message,
             re.IGNORECASE,
         )
