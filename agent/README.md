@@ -64,3 +64,30 @@ Reading the Security log may require an elevated terminal or membership in the l
 - The collector stores a Windows Security EventRecordID checkpoint alongside queued events in one SQLite transaction. It reads ordered batches of up to 1,000 matching records, so backlogs can be drained over repeated cycles without relying on a short time window. If the Windows Security log is cleared and its record ID resets below the saved checkpoint, collection restarts from the beginning of the retained log.
 - Run enrollment and collection as the same Windows user so DPAPI can decrypt the stored credential.
 - Treat event messages and event data as security telemetry; review retention and access controls on the SIEM server.
+
+
+## Graphical setup
+
+Install the project in its virtual environment, then launch:
+
+```powershell
+basesentinel-agent-gui
+```
+
+Enter the BaseSentinel server URL, Server ID and server access code. Enter the connection password only when the server administrator configured one. The client enrolls the device and stores its individual agent credential using Windows DPAPI.
+
+Use **Start monitoring** to launch collection in a background process while the GUI remains open. Closing the GUI stops that process. The GUI does not install a Windows service or configure automatic startup.
+
+## Server-side enrollment settings
+
+An administrator can open **Agent enrollment** from the dashboard. The server generates a random Server ID and a high-entropy access code. The access code is displayed only once; rotate it if it is lost. Only its keyed hash is stored in the database.
+
+A connection password is optional and stored as a password hash. New enrollment can be switched between automatic and disabled. Existing enrolled agents continue using their individual credentials and are not affected by rotating the server access code.
+
+The first access to enrollment settings creates the server identity. Apply database migrations before using this feature:
+
+```powershell
+flask --app "basesentinel:create_app" db upgrade
+```
+
+The server requires `PAIRING_CODE_PEPPER` to be configured with at least 32 bytes of random data, as with the existing one-time enrollment flow.
