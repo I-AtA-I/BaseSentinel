@@ -9,6 +9,11 @@ def dashboard():
     return render_template("dashboard.html")
 
 
+@web.get("/alerts")
+def alerts():
+    return render_template("alerts.html")
+
+
 @web.get("/login")
 def login():
     return render_template("login.html")
