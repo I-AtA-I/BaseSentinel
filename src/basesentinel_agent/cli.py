@@ -2,11 +2,19 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
 import platform
 import socket
 import sys
 import threading
 
+from basesentinel_agent.background import (
+    background_status,
+    release_worker_lock,
+    request_background_stop,
+    start_background_worker,
+    try_acquire_worker_lock,
+)
 from basesentinel_agent.client import AgentApiError, BaseSentinelClient
 from basesentinel_agent.queue import EventQueue
 from basesentinel_agent.storage import AgentConfigStore, default_data_dir
@@ -154,6 +162,8 @@ def _run_cycle(
 ) -> tuple[int, int, int, int]:
     # The authenticated identity request also refreshes the server-side agent heartbeat.
     client.identity()
+    if stop_event is not None and stop_event.is_set():
+        return 0, 0, len(queue), queue.security_checkpoint()
     if stop_event is None:
         return _collect_and_send(client, queue, batch_size)
     return _collect_and_send(client, queue, batch_size, stop_event=stop_event)
@@ -197,24 +207,12 @@ def _watch_for_stop_request(stream, stop_event: threading.Event) -> None:
         stop_event.set()
 
 
-def run(args) -> int:
+def _run_loop(args, stop_event: threading.Event, mode: str) -> int:
     client = _client_from_config()
     queue = _queue()
-    stop_event = threading.Event()
-
-    input_stream = sys.stdin
-    is_interactive = getattr(input_stream, "isatty", lambda: True)()
-    if not is_interactive:
-        threading.Thread(
-            target=_watch_for_stop_request,
-            args=(input_stream, stop_event),
-            daemon=True,
-        ).start()
-
     print(
-        f"BaseSentinel agent running. Collection interval: "
-        f"{args.interval:g}s. Delivery limit: {args.batch_size} event(s) per cycle. "
-        "Press Ctrl+C or use the GUI Stop button to stop."
+        f"BaseSentinel agent {mode}. Collection interval: "
+        f"{args.interval:g}s. Delivery limit: {args.batch_size} event(s) per cycle."
     )
 
     try:
@@ -251,7 +249,114 @@ def run(args) -> int:
     except KeyboardInterrupt:
         pass
 
-    print("\nBaseSentinel agent stopped.")
+    print("\\nBaseSentinel agent stopped.")
+    return 0
+
+
+def run(args) -> int:
+    stop_event = threading.Event()
+    input_stream = sys.stdin
+    is_interactive = getattr(input_stream, "isatty", lambda: True)()
+    if not is_interactive:
+        threading.Thread(
+            target=_watch_for_stop_request,
+            args=(input_stream, stop_event),
+            daemon=True,
+        ).start()
+    return _run_loop(args, stop_event, "running in foreground")
+
+
+def background_worker(args) -> int:
+    """Run the explicitly started, detached worker without opening a console window."""
+    data_dir = default_data_dir()
+    lock = try_acquire_worker_lock(data_dir)
+    if lock is None:
+        print("A BaseSentinel background worker is already running.")
+        return 1
+
+    pid_path = data_dir / "agent.pid"
+    stop_path = data_dir / "agent.stop"
+    worker_pid = str(os.getpid())
+    try:
+        pid_path.write_text(worker_pid, encoding="ascii")
+    except OSError:
+        release_worker_lock(lock)
+        raise
+
+    stop_event = threading.Event()
+
+    def watch_stop_file() -> None:
+        while not stop_event.wait(0.25):
+            if stop_path.exists():
+                try:
+                    stop_path.unlink()
+                except OSError:
+                    pass
+                stop_event.set()
+                break
+
+    watcher = threading.Thread(target=watch_stop_file, daemon=True)
+    watcher.start()
+
+    try:
+        print(f"Background worker PID {worker_pid}.")
+        print(f"Agent log: {data_dir / 'agent.log'}")
+        return _run_loop(args, stop_event, "running in background")
+    finally:
+        stop_event.set()
+        try:
+            try:
+                stop_path.unlink()
+            except OSError:
+                pass
+            try:
+                if pid_path.read_text(encoding="ascii").strip() == worker_pid:
+                    pid_path.unlink()
+            except OSError:
+                pass
+        finally:
+            release_worker_lock(lock)
+
+
+def start_background(args) -> int:
+    try:
+        AgentConfigStore().load()
+        pid = start_background_worker(
+            batch_size=args.batch_size,
+            interval=args.interval,
+        )
+    except (RuntimeError, ValueError, OSError) as exc:
+        print(f"Could not start background agent: {exc}")
+        return 1
+
+    print(f"BaseSentinel background agent started (PID {pid}).")
+    print(f"Log file: {default_data_dir() / 'agent.log'}")
+    print("The agent continues running after this terminal or GUI is closed.")
+    return 0
+
+
+def stop_background(args) -> int:
+    try:
+        stopped = request_background_stop(timeout=args.timeout)
+    except (RuntimeError, TimeoutError, OSError, ValueError) as exc:
+        print(f"Could not confirm background agent shutdown: {exc}")
+        return 1
+
+    if stopped:
+        print("BaseSentinel background agent stopped.")
+    else:
+        print("No BaseSentinel background agent is currently running.")
+    return 0
+
+
+def background_status_command(args) -> int:
+    state = background_status()
+    if state["running"]:
+        pid = state["pid"] if state["pid"] is not None else "unknown"
+        print(f"Background agent: running (PID {pid})")
+    else:
+        print("Background agent: stopped")
+    print(f"Log file: {state['log_path']}")
     return 0
 
 
@@ -259,6 +364,12 @@ def identity(args) -> int:
     client = _client_from_config()
     result = client.identity()
     print(f"Agent {result['agent_id']}: {result['status']}")
+    state = background_status()
+    if state["running"]:
+        print(f"Background worker: running (PID {state['pid'] or 'unknown'})")
+    else:
+        print("Background worker: stopped")
+    print(f"Log file: {state['log_path']}")
     return 0
 
 
@@ -306,6 +417,35 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_parser.add_argument("--batch-size", type=_batch_size, default=500)
     run_parser.set_defaults(handler=run)
+
+    start_parser = commands.add_parser(
+        "start",
+        help="Start continuous collection as a detached, windowless background process.",
+    )
+    start_parser.add_argument("--interval", type=_positive_interval, default=60.0)
+    start_parser.add_argument("--batch-size", type=_batch_size, default=500)
+    start_parser.set_defaults(handler=start_background)
+
+    stop_parser = commands.add_parser(
+        "stop",
+        help="Gracefully stop the background agent.",
+    )
+    stop_parser.add_argument("--timeout", type=float, default=60.0)
+    stop_parser.set_defaults(handler=stop_background)
+
+    background_status_parser = commands.add_parser(
+        "background-status",
+        help="Show whether the background agent is running.",
+    )
+    background_status_parser.set_defaults(handler=background_status_command)
+
+    worker_parser = commands.add_parser(
+        "_background-worker",
+        help=argparse.SUPPRESS,
+    )
+    worker_parser.add_argument("--interval", type=_positive_interval, default=60.0)
+    worker_parser.add_argument("--batch-size", type=_batch_size, default=500)
+    worker_parser.set_defaults(handler=background_worker)
 
     identity_parser = commands.add_parser(
         "status",

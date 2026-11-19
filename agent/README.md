@@ -1,6 +1,6 @@
 # BaseSentinel Windows Agent (MVP)
 
-The Windows endpoint agent is an explicitly run, user-visible command-line collector. Continuous mode runs only while its terminal process is open; it is not installed as a service and does not start automatically with Windows.
+The Windows endpoint agent is an explicitly started collector. It supports a visible foreground mode and a detached, windowless background mode. Background mode continues after the GUI or terminal used to start it is closed. It is not installed as a Windows service and does not start automatically with Windows.
 
 ## Requirements
 
@@ -48,7 +48,21 @@ By default, the agent runs a collection cycle every 60 seconds and attempts to d
 basesentinel-agent run --interval 30 --batch-size 250
 ```
 
-Stop the foreground process with `Ctrl+C`. The GUI Stop button sends a graceful stop request and lets the current event operation finish instead of force-killing the process. If the server is unavailable, pending events stay in the local SQLite queue and the agent retries on the next cycle. Authentication failures (HTTP 401/403) stop the process so the endpoint can be re-enrolled or its access fixed.
+Stop the foreground process with `Ctrl+C`. If the server is unavailable, pending events stay in the local SQLite queue and the agent retries on the next cycle. Authentication failures (HTTP 401/403) stop the process so the endpoint can be re-enrolled or its access fixed.
+
+### Windowless background mode
+
+Start an independent background process that has no console window and continues after the terminal or GUI closes:
+
+```powershell
+basesentinel-agent start --interval 60 --batch-size 500
+basesentinel-agent background-status
+basesentinel-agent stop
+```
+
+The background worker is a separate `python.exe` process. It is visible in Windows Task Manager, holds a single-instance process lock, and writes its output to `%LOCALAPPDATA%\\BaseSentinel\\agent.log`. The GUI can show the worker state and read this log while it is open. Closing the GUI does not stop the worker. Use **Stop agent** in the GUI or `basesentinel-agent stop` to request a graceful shutdown; an in-progress Windows Event Log read or HTTP request is allowed to finish before the process exits.
+
+Background mode starts only after an explicit `Start background` click or `basesentinel-agent start` command. It does not install a service, scheduled task, logon trigger, or automatic startup entry. It runs in the current user's session and stops when that process/session ends.
 
 ## Check enrollment
 
@@ -60,7 +74,7 @@ Reading the Security log may require an elevated terminal or membership in the l
 
 ## Scope and limitations
 
-- Continuous mode is a foreground process only. There is no Windows service, scheduled task, auto-start, remote command execution, or stealth behavior.
+- Background mode is an explicitly started, detached user-session process. It does not install a Windows service, scheduled task, auto-start, remote command execution, or conceal itself from Task Manager.
 - The collector stores a Windows Security EventRecordID checkpoint alongside queued events in one SQLite transaction. It reads ordered batches of up to 1,000 matching records, so backlogs can be drained over repeated cycles without relying on a short time window. If the Windows Security log is cleared and its record ID resets below the saved checkpoint, collection restarts from the beginning of the retained log.
 - Run enrollment and collection as the same Windows user so DPAPI can decrypt the stored credential.
 - Treat event messages and event data as security telemetry; review retention and access controls on the SIEM server.
@@ -76,7 +90,7 @@ basesentinel-agent-gui
 
 Use either the one-time invitation link or the invitation code plus the server URL. The current invitation workflow does not require a Server ID, server access code, or connection password. The client exchanges the invitation for an individual agent credential and stores it using Windows DPAPI.
 
-Use **Start monitoring** to launch collection in a background process while the GUI remains open. Closing the GUI stops that process. The GUI does not install a Windows service or configure automatic startup.
+The GUI is packaged as a windowed Windows application so launching it does not open an extra console. **Start background** launches the separate windowless collector; you can close the GUI and the collector continues. Reopen the GUI to inspect its status and activity log, or use **Stop agent** to request a clean shutdown. This does not install a service or configure automatic startup.
 
 ## Enrollment policy
 
@@ -106,13 +120,15 @@ Administrators can open **Clients** from the dashboard navigation to view enroll
 
 The Windows agent GUI now provides **Run diagnostics**, **Collect now**, **Start monitoring**, and **Stop** actions. Its output panel shows collection results, delivery failures, server errors, queue depth, and the Security log checkpoint. Keep the GUI open while continuous monitoring is running; closing it stops the foreground agent process.
 
-Run the same checks from PowerShell:
+Run the same checks and lifecycle controls from PowerShell:
 
 ```powershell
 basesentinel-agent diagnostics
 basesentinel-agent collect --batch-size 500
 basesentinel-agent drain --batch-size 500
-basesentinel-agent run --interval 60 --batch-size 500
+basesentinel-agent start --interval 60 --batch-size 500
+basesentinel-agent background-status
+basesentinel-agent stop
 ```
 
 Diagnostics checks the authenticated server connection, local pending queue, checkpoint, and whether the current Windows user can read the Security event log. It does not send events or change the checkpoint. **Collect now** (or the `collect` command) reads new events, persists them and the checkpoint locally, then attempts to deliver up to 500 queued events by default. **Drain backlog** (or the `drain` command) sends only events already stored in the local SQLite queue; it does not read the Windows event log or change the checkpoint. The GUI lets the operator choose a delivery limit of 50, 100, 250, or 500. Continuous mode repeats collection and delivery, and sends an authenticated heartbeat every cycle. A large pending count is a backlog, not a delivery confirmation; it decreases as the server acknowledges queued events.

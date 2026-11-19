@@ -22,6 +22,8 @@ dev = [
 
 [project.scripts]
 basesentinel-agent = "basesentinel_agent.cli:main"
+
+[project.gui-scripts]
 basesentinel-agent-gui = "basesentinel_agent.gui:main"
 
 [tool.setuptools.packages.find]
