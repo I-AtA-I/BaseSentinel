@@ -9,7 +9,11 @@ import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from basesentinel_agent.background import agent_log_path, background_status
+from basesentinel_agent.background import (
+    agent_log_path,
+    background_status,
+    console_python_executable,
+)
 from basesentinel_agent.client import AgentApiError, BaseSentinelClient
 from basesentinel_agent.queue import EventQueue
 from basesentinel_agent.storage import AgentConfigStore, default_data_dir
@@ -85,6 +89,8 @@ class AgentWindow:
         muted = COLORS["muted"]
 
         style.configure(".", font=("Segoe UI", 9))
+        style.configure("TFrame", background=panel)
+        style.configure("TLabel", background=panel, foreground=text)
         style.configure("App.TFrame", background=bg)
         style.configure("Panel.TFrame", background=panel)
         style.configure("Sidebar.TFrame", background=COLORS["sidebar"])
@@ -991,7 +997,7 @@ class AgentWindow:
         )
         self._update_actions()
         command = [
-            sys.executable,
+            console_python_executable(),
             "-m",
             "basesentinel_agent.cli",
             *arguments,
