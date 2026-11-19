@@ -233,6 +233,9 @@ def test_all_roles_can_view_event_detail(
         "test": True,
         "value": 7,
     }
+    assert data["device"]["name"] == "Query Workstation One"
+    assert data["device"]["hostname"] == "query-workstation-one"
+    assert data["device"]["platform"] == "windows"
 
 
 def test_list_does_not_include_event_data(client, users, seeded_events):
@@ -418,6 +421,39 @@ def test_invalid_event_filters_return_400(
     )
 
     assert response.status_code == 400
+
+
+def test_level_zero_is_hidden_by_default_and_available_via_explicit_filter(
+    client,
+    users,
+    seeded_events,
+):
+    EventIngestionService.ingest(
+        seeded_events["agent_one"],
+        make_event(
+            "authentication",
+            "login.success",
+            0,
+            "2026-11-17T17:00:00Z",
+            "Successful sign-in retained for audit",
+        ),
+    )
+    token = login(client, "viewer")
+
+    default_response = client.get("/api/v1/events", headers=auth_headers(token))
+    assert default_response.status_code == 200
+    assert default_response.get_json()["pagination"]["total"] == 4
+    assert all(item["severity"] >= 1 for item in default_response.get_json()["items"])
+
+    level_zero_response = client.get(
+        "/api/v1/events?severity_min=0&severity_max=0",
+        headers=auth_headers(token),
+    )
+    assert level_zero_response.status_code == 200
+    data = level_zero_response.get_json()
+    assert data["pagination"]["total"] == 1
+    assert data["items"][0]["severity"] == 0
+    assert data["items"][0]["event_type"] == "login.success"
 
 
 def test_invalid_event_id_returns_400(client, users):

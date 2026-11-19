@@ -13,6 +13,11 @@ def events():
     return render_template("events.html")
 
 
+@web.get("/events/<event_id>")
+def event_detail(event_id):
+    return render_template("event_detail.html", event_id=event_id)
+
+
 @web.get("/alerts")
 def alerts():
     return render_template("alerts.html")

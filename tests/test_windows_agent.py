@@ -87,6 +87,12 @@ def test_security_event_collector_normalizes_windows_events(monkeypatch):
     ))
 
 
+def test_successful_login_is_classified_as_informational():
+    from basesentinel_agent.windows_eventlog import _EVENT_MAP
+
+    assert _EVENT_MAP[4624] == ("authentication", "login.success", 0)
+
+
 def test_security_event_collector_handles_empty_log(monkeypatch):
     import subprocess
     from basesentinel_agent import windows_eventlog

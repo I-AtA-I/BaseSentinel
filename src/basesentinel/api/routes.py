@@ -63,6 +63,8 @@ def _parse_event_datetime(value):
 
 
 def _event_summary_payload(event):
+    agent = event.agent
+    asset = agent.asset if agent is not None else None
     return {
         "id": str(event.id),
         "agent_id": str(event.agent_id),
@@ -75,6 +77,19 @@ def _event_summary_payload(event):
         "message": event.message,
         "occurred_at": _serialize_datetime(event.occurred_at),
         "received_at": _serialize_datetime(event.received_at),
+        "device": (
+            {
+                "id": str(agent.id),
+                "name": asset.display_name,
+                "hostname": asset.hostname,
+                "platform": agent.platform,
+                "platform_version": agent.platform_version,
+                "architecture": agent.architecture,
+                "agent_version": agent.agent_version,
+            }
+            if agent is not None and asset is not None
+            else None
+        ),
     }
 
 
@@ -842,6 +857,12 @@ def list_security_events():
             400,
         )
 
+    # Level 0 is audit-only telemetry. By default, the event registry
+    # shows security-relevant events (levels 1–10). Explicit level filters
+    # can still request informational events.
+    if severity_min is None and severity_max is None:
+        severity_min = 1
+
     if (
         severity_min is not None
         and severity_max is not None
@@ -905,6 +926,7 @@ def list_security_events():
 
     events = db.session.scalars(
         select(SecurityEvent)
+        .options(selectinload(SecurityEvent.agent).selectinload(Agent.asset))
         .where(*conditions)
         .order_by(
             SecurityEvent.received_at.desc(),
