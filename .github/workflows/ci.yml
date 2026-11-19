@@ -40,6 +40,8 @@ jobs:
         run: |
           node --check src/basesentinel/static/js/dashboard.js
           node --check src/basesentinel/static/js/alerts.js
+          node --check src/basesentinel/static/js/agents.js
+          node --check src/basesentinel/static/js/events.js
 
       - name: Run tests
         run: python -m pytest -q tests --ignore=tests/integration

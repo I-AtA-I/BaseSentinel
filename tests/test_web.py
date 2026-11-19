@@ -116,3 +116,16 @@ def test_dashboard_alert_links_open_alert_workspace(client):
 
     assert response.status_code == 200
     assert b'href="/alerts"' in response.data
+
+
+def test_security_events_page_is_available(client):
+    response = client.get("/events")
+    assert response.status_code == 200
+    assert b"Security events" in response.data
+    assert b"/static/js/events.js" in response.data
+
+
+def test_security_events_javascript_static_file_is_available(client):
+    response = client.get("/static/js/events.js")
+    assert response.status_code == 200
+    assert b"DOMContentLoaded" in response.data

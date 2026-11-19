@@ -3,6 +3,7 @@
 const authToken = sessionStorage.getItem("basesentinel_token");
 const table = document.getElementById("clients-table");
 const message = document.getElementById("clients-message");
+let canManage = false;
 
 async function api(path, options = {}) {
     const response = await fetch("/api/v1" + path, {
@@ -36,6 +37,36 @@ function statusLabel(status) {
     return status === "active" ? "Active" : status === "revoked" ? "Revoked" : status;
 }
 
+function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    })[character]);
+}
+
+async function removeAgent(button) {
+    const agentId = button.dataset.deleteAgent;
+    const row = button.closest("tr");
+    const device = row?.querySelector("td strong")?.textContent || "this device";
+    const confirmed = window.confirm(
+        "PERMANENTLY DELETE " + device + "?\n\nThis removes the endpoint, its credentials, all collected events and alerts. This cannot be undone."
+    );
+    if (!confirmed) return;
+
+    button.disabled = true;
+    try {
+        const result = await api("/agents/" + encodeURIComponent(agentId), {method: "DELETE"});
+        showMessage(
+            "Device permanently deleted. Removed " + result.deleted_events +
+            " events, " + result.deleted_alerts + " alerts and " +
+            result.deleted_credentials + " credentials."
+        );
+        await loadClients();
+    } catch (error) {
+        showMessage(error.message || "Unable to delete device.", true);
+        button.disabled = false;
+    }
+}
+
 async function loadClients() {
     table.innerHTML = '<tr><td colspan="7" class="table-empty">Loading clients...</td></tr>';
     try {
@@ -58,9 +89,13 @@ async function loadClients() {
                 <td><span class="status-pill ${active ? "status-success" : "status-muted"}">${escapeHtml(statusLabel(agent.status))}</span></td>
                 <td>${escapeHtml(dateLabel(agent.last_checkin_at))}</td>
                 <td>${escapeHtml(dateLabel(agent.enrolled_at))}</td>
-                <td>${active ? `<button class="secondary-button" type="button" data-revoke-agent="${agent.id}">Revoke</button>` : "—"}</td>
+                <td><div class="alert-actions">
+                    ${canManage && active ? `<button class="secondary-button" type="button" data-revoke-agent="${escapeHtml(agent.id)}">Revoke</button>` : ""}
+                    ${canManage ? `<button class="action-button" type="button" data-delete-agent="${escapeHtml(agent.id)}">Delete</button>` : ""}
+                </div></td>
             </tr>`;
         }).join("");
+
         table.querySelectorAll("[data-revoke-agent]").forEach((button) => {
             button.addEventListener("click", async () => {
                 if (!window.confirm("Revoke this agent? It will no longer be able to authenticate. Historical events will be preserved.")) return;
@@ -75,17 +110,23 @@ async function loadClients() {
                 }
             });
         });
+        table.querySelectorAll("[data-delete-agent]").forEach((button) => {
+            button.addEventListener("click", () => removeAgent(button));
+        });
     } catch (error) {
         table.innerHTML = '<tr><td colspan="7" class="table-empty">Could not load clients.</td></tr>';
         showMessage(error.message, true);
     }
 }
 
-function escapeHtml(value) {
-    return String(value).replace(/[&<>"']/g, (character) => ({
-        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-    })[character]);
-}
-
 document.getElementById("refresh-clients").addEventListener("click", loadClients);
-loadClients();
+(async function initializeClients() {
+    try {
+        const user = await api("/auth/me");
+        canManage = user.role === "admin";
+    } catch (error) {
+        showMessage(error.message || "Unable to initialize client management.", true);
+        return;
+    }
+    await loadClients();
+})();
