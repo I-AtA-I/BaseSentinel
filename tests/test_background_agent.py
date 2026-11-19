@@ -196,6 +196,7 @@ def test_console_python_executable_prefers_python_exe_for_pythonw(monkeypatch, t
     python = tmp_path / "python.exe"
     pythonw.touch()
     python.touch()
-    monkeypatch.setattr(background.os, "name", "nt")
+    from types import SimpleNamespace
+    monkeypatch.setattr(background, "os", SimpleNamespace(name="nt"))
 
     assert background.console_python_executable(str(pythonw)) == str(python)
