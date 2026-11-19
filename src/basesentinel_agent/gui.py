@@ -837,11 +837,13 @@ class AgentWindow:
     def _update_actions(self) -> None:
         idle_task = self.process is None and not self.control_busy
         self.connect_button.configure(
-            state="normal" if self.config_loaded is False and not self.enrolling and idle_task
-            else "normal" if not self.enrolling and idle_task and not self.background_running
-            else "disabled"
+            state=(
+                "normal"
+                if not self.enrolling and idle_task and not self.background_running
+                else "disabled"
+            )
         )
-        ready = self.config_loaded and idle_task
+        ready = self.config_loaded and idle_task and not self.background_running
         self.diagnostics_button.configure(state="normal" if ready else "disabled")
         self.collect_button.configure(state="normal" if ready else "disabled")
         self.drain_button.configure(state="normal" if ready else "disabled")
