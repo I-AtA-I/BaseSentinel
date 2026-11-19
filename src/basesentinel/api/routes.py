@@ -62,10 +62,38 @@ def _parse_event_datetime(value):
     return parsed.astimezone(timezone.utc).replace(tzinfo=None)
 
 
+def _agent_context_payload(agent):
+    if agent is None:
+        return None
+
+    asset = agent.asset
+
+    return {
+        "id": str(agent.id),
+        "display_name": asset.display_name if asset is not None else None,
+        "hostname": asset.hostname if asset is not None else None,
+        "platform": agent.platform,
+        "platform_version": agent.platform_version,
+        "architecture": agent.architecture,
+        "agent_version": agent.agent_version,
+        "status": agent.status,
+        "enrolled_at": _serialize_datetime(agent.enrolled_at),
+        "last_checkin_at": _serialize_datetime(agent.last_checkin_at),
+    }
+
+
 def _event_summary_payload(event):
+    agent = event.agent
+    asset = agent.asset if agent is not None else None
+
     return {
         "id": str(event.id),
         "agent_id": str(event.agent_id),
+        "device_name": (
+            asset.display_name or asset.hostname
+            if asset is not None
+            else None
+        ),
         "event_uid": str(event.event_uid),
         "category": event.category,
         "event_type": event.event_type,
@@ -83,6 +111,7 @@ def _event_detail_payload(event):
         **_event_summary_payload(event),
         "schema_version": event.schema_version,
         "event_data": event.event_data,
+        "device": _agent_context_payload(event.agent),
     }
 
 
@@ -905,6 +934,9 @@ def list_security_events():
 
     events = db.session.scalars(
         select(SecurityEvent)
+        .options(
+            selectinload(SecurityEvent.agent).selectinload(Agent.asset)
+        )
         .where(*conditions)
         .order_by(
             SecurityEvent.received_at.desc(),
@@ -1163,7 +1195,15 @@ def get_alert(alert_id):
             404,
         )
 
-    response = jsonify(_alert_payload(alert))
+    payload = _alert_payload(alert)
+    payload["device"] = _agent_context_payload(alert.agent)
+    payload["source_event"] = (
+        _event_detail_payload(alert.source_event)
+        if alert.source_event is not None
+        else None
+    )
+
+    response = jsonify(payload)
     response.headers["Cache-Control"] = "no-store"
 
     return response, 200
