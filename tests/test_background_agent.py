@@ -133,13 +133,12 @@ def test_background_worker_releases_lock_and_pid_file(monkeypatch, tmp_path):
     from basesentinel_agent import cli
 
     monkeypatch.setattr(cli, "default_data_dir", lambda: tmp_path)
-    monkeypatch.setattr(
-        cli,
-        "_run_loop",
-        lambda _args, stop_event, mode: (
-            stop_event.is_set() is False and mode == "running in background" and 0
-        ),
-    )
+    def fake_run_loop(_args, stop_event, mode):
+        assert stop_event.is_set() is False
+        assert mode == "running in background"
+        return 0
+
+    monkeypatch.setattr(cli, "_run_loop", fake_run_loop)
 
     result = cli.background_worker(Namespace(interval=60, batch_size=500))
 
@@ -162,3 +161,41 @@ def test_background_commands_are_available_and_have_safe_defaults():
     assert stop.timeout == 60.0
     assert status.handler.__name__ == "background_status_command"
     assert worker.handler.__name__ == "background_worker"
+
+
+def test_run_cycle_skips_collection_when_stop_arrives_after_heartbeat(monkeypatch):
+    import threading
+    from basesentinel_agent import cli
+
+    stop_event = threading.Event()
+
+    class FakeClient:
+        def identity(self):
+            stop_event.set()
+
+    class FakeQueue:
+        def __len__(self):
+            return 7
+
+        @staticmethod
+        def security_checkpoint():
+            return 123
+
+    monkeypatch.setattr(
+        cli,
+        "_collect_and_send",
+        lambda *_args, **_kwargs: pytest.fail("Collection must not start after stop."),
+    )
+
+    result = cli._run_cycle(FakeClient(), FakeQueue(), 500, stop_event=stop_event)
+    assert result == (0, 0, 7, 123)
+
+
+def test_console_python_executable_prefers_python_exe_for_pythonw(monkeypatch, tmp_path):
+    pythonw = tmp_path / "pythonw.exe"
+    python = tmp_path / "python.exe"
+    pythonw.touch()
+    python.touch()
+    monkeypatch.setattr(background.os, "name", "nt")
+
+    assert background.console_python_executable(str(pythonw)) == str(python)
