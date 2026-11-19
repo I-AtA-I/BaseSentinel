@@ -8,6 +8,11 @@ def dashboard():
     return render_template("dashboard.html")
 
 
+@web.get("/events")
+def events():
+    return render_template("events.html")
+
+
 @web.get("/alerts")
 def alerts():
     return render_template("alerts.html")
