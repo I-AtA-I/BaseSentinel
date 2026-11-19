@@ -1,11 +1,12 @@
 
+import uuid
 from datetime import timedelta
 
 import pytest
 
 from basesentinel import create_app, db
 from basesentinel.core.security import generate_agent_token, hash_agent_token
-from basesentinel.models import Agent, AgentCredential, Asset
+from basesentinel.models import Agent, AgentCredential, Asset, Alert, SecurityEvent
 from basesentinel.models.base import utcnow_naive
 from basesentinel.services.authentication import AgentAuthenticationService
 from basesentinel.services.users import UserService
@@ -350,4 +351,77 @@ def test_rotation_returns_404_for_unknown_agent(client, admin):
         headers=auth_headers(token),
     )
 
+    assert response.status_code == 404
+
+
+def test_viewer_cannot_delete_agent(client, viewer, agent):
+    token = login(client, "apiviewer")
+    response = client.delete(
+        f"/api/v1/agents/{agent['id']}",
+        headers=auth_headers(token),
+    )
+    assert response.status_code == 403
+    assert db.session.get(Agent, agent["id"]) is not None
+
+
+def test_admin_can_permanently_delete_agent_and_telemetry(client, app, admin, agent):
+    stored_agent = db.session.get(Agent, agent["id"])
+    event = SecurityEvent(
+        agent_id=stored_agent.id,
+        event_uid=uuid.uuid4(),
+        schema_version=1,
+        category="authentication",
+        event_type="login.failed",
+        severity=7,
+        source="Windows Security",
+        event_code="4625",
+        message="Test failed login",
+        event_data={"record_id": 123},
+        occurred_at=utcnow_naive(),
+        received_at=utcnow_naive(),
+    )
+    db.session.add(event)
+    db.session.flush()
+    alert = Alert(
+        rule_key="test_rule",
+        title="Test alert",
+        description="Test alert description",
+        severity=7,
+        status="open",
+        agent_id=stored_agent.id,
+        source_event_id=event.id,
+        deduplication_key="a" * 64,
+    )
+    db.session.add(alert)
+    db.session.commit()
+
+    token = login(client, "apiadmin")
+    response = client.delete(
+        f"/api/v1/agents/{agent['id']}",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["deleted"] is True
+    assert payload["deleted_events"] == 1
+    assert payload["deleted_alerts"] == 1
+    assert payload["deleted_credentials"] == 1
+    assert payload["asset_deleted"] is True
+    assert db.session.get(Agent, agent["id"]) is None
+    assert db.session.get(AgentCredential, agent["credential_id"]) is None
+    assert SecurityEvent.query.count() == 0
+    assert Alert.query.count() == 0
+    assert client.get(
+        "/api/v1/agents",
+        headers=auth_headers(token),
+    ).get_json()["pagination"]["total"] == 0
+
+
+def test_delete_agent_returns_404_for_unknown_agent(client, admin):
+    token = login(client, "apiadmin")
+    response = client.delete(
+        f"/api/v1/agents/{uuid.uuid4()}",
+        headers=auth_headers(token),
+    )
     assert response.status_code == 404
