@@ -129,3 +129,21 @@ def test_security_events_javascript_static_file_is_available(client):
     response = client.get("/static/js/events.js")
     assert response.status_code == 200
     assert b"DOMContentLoaded" in response.data
+
+
+
+def test_security_event_detail_page_is_available(client):
+    event_id = "12345678-1234-1234-1234-123456789abc"
+    response = client.get(f"/events/{event_id}")
+
+    assert response.status_code == 200
+    assert b"EVENT DETAILS" in response.data
+    assert b'data-event-id=\"12345678-1234-1234-1234-123456789abc\"' in response.data
+    assert b"/static/js/event-detail.js" in response.data
+
+
+def test_security_event_detail_javascript_is_available(client):
+    response = client.get("/static/js/event-detail.js")
+
+    assert response.status_code == 200
+    assert b"initializeEventDetail" in response.data
