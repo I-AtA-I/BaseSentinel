@@ -122,8 +122,8 @@ def test_security_events_page_is_available(client):
     response = client.get("/events")
     assert response.status_code == 200
     assert b"Security events" in response.data
-    assert b"Security events Â· Level 1â10" in response.data
-    assert b"Informational audit Â· Level 0 only" in response.data
+    assert b'value="security" selected' in response.data
+    assert b'value="info"' in response.data
     assert b"/static/js/events.js" in response.data
 
 
