@@ -217,3 +217,23 @@ def test_windowed_gui_entrypoint_is_registered_and_module_compiles():
         repository_root / "src" / "basesentinel_agent" / "gui.py"
     ).read_text(encoding="utf-8")
     compile(gui_source, "basesentinel_agent/gui.py", "exec")
+
+
+
+def test_status_checks_use_shared_locks_and_do_not_contend_with_each_other(tmp_path):
+    first_reader = background._try_acquire_status_lock(tmp_path)
+    second_reader = background._try_acquire_status_lock(tmp_path)
+    assert first_reader is not None
+    assert second_reader is not None
+
+    # Another status probe must also be able to read while existing probes run.
+    assert background.background_status(tmp_path)["running"] is False
+
+    # A real worker's exclusive lock must exclude status probes.
+    background.release_worker_lock(first_reader)
+    background.release_worker_lock(second_reader)
+    worker = background.try_acquire_worker_lock(tmp_path)
+    assert worker is not None
+    assert background._try_acquire_status_lock(tmp_path) is None
+    assert background.background_status(tmp_path)["running"] is True
+    background.release_worker_lock(worker)
