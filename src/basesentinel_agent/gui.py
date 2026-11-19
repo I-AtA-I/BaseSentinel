@@ -203,18 +203,8 @@ class AgentWindow:
             background=[("selected", "#264354")],
             foreground=[("selected", text)],
         )
-        style.configure(
-            "TNotebook.Tab",
-            background=COLORS["panel_alt"],
-            foreground=muted,
-            padding=(14, 8),
-            borderwidth=0,
-        )
-        style.map(
-            "TNotebook.Tab",
-            background=[("selected", panel)],
-            foreground=[("selected", COLORS["accent"])],
-        )
+        # Navigation is provided by the sidebar; hide duplicate notebook tabs.
+        style.layout("TNotebook.Tab", [])
 
     def _build_interface(self) -> None:
         shell = tk.Frame(self.root, bg=COLORS["background"])
