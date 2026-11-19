@@ -43,8 +43,12 @@ def console_python_executable(executable: str | None = None) -> str:
     return selected
 
 
-def try_acquire_worker_lock(data_dir: Path | None = None) -> BinaryIO | None:
-    """Acquire the single-instance lock, or return None when another worker owns it."""
+def _try_acquire_file_lock(
+    data_dir: Path | None = None,
+    *,
+    shared: bool,
+) -> BinaryIO | None:
+    """Acquire a shared status lock or an exclusive worker lock without waiting."""
     paths = _paths(data_dir)
     paths["root"].mkdir(parents=True, exist_ok=True)
     handle = paths["lock"].open("a+b")
@@ -59,16 +63,28 @@ def try_acquire_worker_lock(data_dir: Path | None = None) -> BinaryIO | None:
         if os.name == "nt":
             import msvcrt
 
-            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            operation = msvcrt.LK_NBRLCK if shared else msvcrt.LK_NBLCK
+            msvcrt.locking(handle.fileno(), operation, 1)
         else:
             import fcntl
 
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            operation = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
+            fcntl.flock(handle.fileno(), operation | fcntl.LOCK_NB)
     except OSError:
         handle.close()
         return None
 
     return handle
+
+
+def try_acquire_worker_lock(data_dir: Path | None = None) -> BinaryIO | None:
+    """Acquire the exclusive single-instance lock for the background worker."""
+    return _try_acquire_file_lock(data_dir, shared=False)
+
+
+def _try_acquire_status_lock(data_dir: Path | None = None) -> BinaryIO | None:
+    """Acquire a shared lock so concurrent status checks do not block one another."""
+    return _try_acquire_file_lock(data_dir, shared=True)
 
 
 def release_worker_lock(handle: BinaryIO) -> None:
@@ -90,7 +106,7 @@ def release_worker_lock(handle: BinaryIO) -> None:
 def background_status(data_dir: Path | None = None) -> dict:
     """Check whether the background worker currently owns the process lock."""
     paths = _paths(data_dir)
-    lock = try_acquire_worker_lock(paths["root"])
+    lock = _try_acquire_status_lock(paths["root"])
     if lock is not None:
         release_worker_lock(lock)
         return {
