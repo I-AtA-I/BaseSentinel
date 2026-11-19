@@ -3,6 +3,7 @@
 const authToken = sessionStorage.getItem("basesentinel_token");
 const table = document.getElementById("clients-table");
 const message = document.getElementById("clients-message");
+let canManage = false;
 
 async function api(path, options = {}) {
     const response = await fetch("/api/v1" + path, {
@@ -89,8 +90,8 @@ async function loadClients() {
                 <td>${escapeHtml(dateLabel(agent.last_checkin_at))}</td>
                 <td>${escapeHtml(dateLabel(agent.enrolled_at))}</td>
                 <td><div class="alert-actions">
-                    ${active ? `<button class="secondary-button" type="button" data-revoke-agent="${escapeHtml(agent.id)}">Revoke</button>` : ""}
-                    <button class="action-button" type="button" data-delete-agent="${escapeHtml(agent.id)}">Delete</button>
+                    ${canManage && active ? `<button class="secondary-button" type="button" data-revoke-agent="${escapeHtml(agent.id)}">Revoke</button>` : ""}
+                    ${canManage ? `<button class="action-button" type="button" data-delete-agent="${escapeHtml(agent.id)}">Delete</button>` : ""}
                 </div></td>
             </tr>`;
         }).join("");
@@ -119,4 +120,13 @@ async function loadClients() {
 }
 
 document.getElementById("refresh-clients").addEventListener("click", loadClients);
-loadClients();
+(async function initializeClients() {
+    try {
+        const user = await api("/auth/me");
+        canManage = user.role === "admin";
+    } catch (error) {
+        showMessage(error.message || "Unable to initialize client management.", true);
+        return;
+    }
+    await loadClients();
+})();
