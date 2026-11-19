@@ -161,6 +161,8 @@ def _run_cycle(
 ) -> tuple[int, int, int, int]:
     # The authenticated identity request also refreshes the server-side agent heartbeat.
     client.identity()
+    if stop_event is not None and stop_event.is_set():
+        return 0, 0, len(queue), queue.security_checkpoint()
     if stop_event is None:
         return _collect_and_send(client, queue, batch_size)
     return _collect_and_send(client, queue, batch_size, stop_event=stop_event)
