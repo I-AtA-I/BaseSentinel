@@ -237,3 +237,56 @@ def test_status_checks_use_shared_locks_and_do_not_contend_with_each_other(tmp_p
     assert background._try_acquire_status_lock(tmp_path) is None
     assert background.background_status(tmp_path)["running"] is True
     background.release_worker_lock(worker)
+
+
+
+def test_windows_lock_modes_use_shared_status_and_exclusive_worker_locks(
+    monkeypatch,
+    tmp_path,
+):
+    import os as real_os
+    import sys
+    from types import ModuleType, SimpleNamespace
+
+    fake_msvcrt = ModuleType("msvcrt")
+    fake_msvcrt.LK_NBRLCK = 4
+    fake_msvcrt.LK_NBLCK = 2
+    fake_msvcrt.LK_UNLCK = 0
+    calls = []
+    fake_msvcrt.locking = lambda _fd, mode, _length: calls.append(mode)
+    monkeypatch.setitem(sys.modules, "msvcrt", fake_msvcrt)
+    monkeypatch.setattr(
+        background,
+        "os",
+        SimpleNamespace(name="nt", SEEK_END=real_os.SEEK_END),
+    )
+
+    reader = background._try_acquire_status_lock(tmp_path)
+    assert reader is not None
+    background.release_worker_lock(reader)
+    assert calls == [fake_msvcrt.LK_NBRLCK, fake_msvcrt.LK_UNLCK]
+
+    calls.clear()
+    worker = background.try_acquire_worker_lock(tmp_path)
+    assert worker is not None
+    background.release_worker_lock(worker)
+    assert calls == [fake_msvcrt.LK_NBLCK, fake_msvcrt.LK_UNLCK]
+
+
+def test_event_workspace_sidebar_items_are_interactive():
+    from pathlib import Path
+
+    source_path = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "basesentinel_agent"
+        / "gui.py"
+    )
+    source = source_path.read_text(encoding="utf-8")
+    compile(source, str(source_path), "exec")
+
+    assert 'self._side_item("⌁", "Event collection", target="collection")' in source
+    assert 'self._side_item("▤", "Local event queue", target="queue")' in source
+    assert "command=lambda: self._navigate_to(target)" in source
+    assert "ttk.Treeview(" in source
+    assert "command=self.drain_backlog" in source
