@@ -358,9 +358,9 @@ def test_events_are_ordered_newest_first(client, users, seeded_events):
     items = response.get_json()["items"]
 
     assert [item["message"] for item in items] == [
-        "Failed login",
-        "Network connection opened",
         "Service stopped",
+        "Network connection opened",
+        "Failed login",
     ]
 
 
@@ -384,7 +384,7 @@ def test_event_pagination(client, users, seeded_events):
 
     assert [item["message"] for item in data["items"]] == [
         "Network connection opened",
-        "Service stopped",
+        "Failed login",
     ]
 
 
