@@ -12,14 +12,17 @@ from basesentinel.models import SecurityEvent
 from uuid import UUID
 
 from flask import g, jsonify, request
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import selectinload
 
 from basesentinel import db
 from basesentinel.api import api
 from basesentinel.api.decorators import require_agent, require_user
 from basesentinel.api.permissions import require_role
-from basesentinel.models import Agent, AgentCredential, AgentInvitation
+from basesentinel.models import (
+    Agent, AgentCredential, AgentInvitation, PairingCode,
+    AssetAddress, AssetInterface,
+)
 from basesentinel.services.credentials import (
     AgentCredentialService,
     AgentUnavailableError,
@@ -464,6 +467,85 @@ def revoke_agent(agent_id):
     }), 200
 
 
+@api.delete("/agents/<agent_id>")
+@require_user
+@require_role("admin")
+def delete_agent(agent_id):
+    """Permanently remove an endpoint, its telemetry and its credentials."""
+    parsed_id = _parse_uuid(agent_id)
+    if parsed_id is None:
+        return _error_response("invalid_agent_id", "Invalid agent ID.", 400)
+
+    agent = db.session.get(Agent, parsed_id)
+    if agent is None:
+        return _error_response("agent_not_found", "Agent not found.", 404)
+
+    asset_id = agent.asset_id
+    try:
+        # Alerts reference both the agent and source event, so remove them first.
+        deleted_alerts = db.session.execute(
+            delete(Alert).where(Alert.agent_id == parsed_id)
+        ).rowcount or 0
+        deleted_events = db.session.execute(
+            delete(SecurityEvent).where(SecurityEvent.agent_id == parsed_id)
+        ).rowcount or 0
+        deleted_credentials = db.session.execute(
+            delete(AgentCredential).where(AgentCredential.agent_id == parsed_id)
+        ).rowcount or 0
+
+        # Keep enrollment audit records, but detach references to the removed rows.
+        db.session.execute(
+            update(PairingCode)
+            .where(PairingCode.consumed_by_agent_id == parsed_id)
+            .values(consumed_by_agent_id=None)
+        )
+        db.session.delete(agent)
+        db.session.flush()
+
+        remaining_agents = db.session.scalar(
+            select(func.count()).select_from(Agent).where(Agent.asset_id == asset_id)
+        )
+        asset_deleted = False
+        if remaining_agents == 0:
+            # A target asset reference must not prevent removal of the endpoint.
+            db.session.execute(
+                update(PairingCode)
+                .where(PairingCode.target_asset_id == asset_id)
+                .values(target_asset_id=None)
+            )
+            interface_ids = select(AssetInterface.id).where(
+                AssetInterface.asset_id == asset_id
+            )
+            db.session.execute(
+                delete(AssetAddress).where(
+                    AssetAddress.interface_id.in_(interface_ids)
+                )
+            )
+            db.session.execute(
+                delete(AssetInterface).where(AssetInterface.asset_id == asset_id)
+            )
+            asset = db.session.get(__import__("basesentinel.models", fromlist=["Asset"]).Asset, asset_id)
+            if asset is not None:
+                db.session.delete(asset)
+                asset_deleted = True
+
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+
+    response = jsonify({
+        "agent_id": str(parsed_id),
+        "deleted": True,
+        "asset_deleted": asset_deleted,
+        "deleted_events": deleted_events,
+        "deleted_alerts": deleted_alerts,
+        "deleted_credentials": deleted_credentials,
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response, 200
+
+
 @api.get("/agents/<agent_id>/credentials")
 @require_user
 @require_role("admin")
@@ -825,6 +907,7 @@ def list_security_events():
         select(SecurityEvent)
         .where(*conditions)
         .order_by(
+            SecurityEvent.received_at.desc(),
             SecurityEvent.occurred_at.desc(),
             SecurityEvent.id.desc(),
         )
