@@ -252,16 +252,8 @@ class AgentWindow:
         self._side_item("▤", "Local event queue")
 
         self._side_heading("CONNECTION")
-        self.sidebar_status_dot = tk.Label(
-            self.sidebar,
-            text="●",
-            bg=COLORS["sidebar"],
-            fg=COLORS["muted"],
-            font=("Segoe UI", 9),
-        )
         status_row = tk.Frame(self.sidebar, bg=COLORS["sidebar"])
         status_row.pack(fill="x", pady=(4, 18))
-        self.sidebar_status_dot.pack_forget()
         self.sidebar_status_dot = tk.Label(
             status_row,
             text="●",
@@ -650,6 +642,7 @@ class AgentWindow:
         )
 
         self._detail_row(panel, "AGENT ID", self.agent_value)
+        self._detail_row(panel, "RUNTIME STATUS", self.status_detail)
         self._detail_row(panel, "SERVER", self.server_value)
         self._detail_row(panel, "WORKER PID", self.pid_value)
         self._detail_row(panel, "QUEUE", self.queue_value)
