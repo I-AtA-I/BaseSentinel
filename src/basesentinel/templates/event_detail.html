@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Event details | BaseSentinel</title><link rel="stylesheet" href="{{ url_for('web.static', filename='css/dashboard.css') }}"></head>
+<body data-event-id="{{ event_id }}"><div class="app-shell">
+<aside class="sidebar"><a class="brand" href="/"><span class="brand-mark">B</span><span><strong>BASESENTINEL</strong><small>LOCAL SECURITY SYSTEM</small></span></a><div class="sidebar-section"><span class="sidebar-label">OPERATIONS / 01</span><a class="nav-link" href="/">◈ Overview</a><a class="nav-link active" href="/events">⌁ Security events</a><a class="nav-link" href="/alerts">△ Alerts</a><a class="nav-link" href="/agents">▦ Clients</a><a class="nav-link" href="/settings/enrollment">⚙ Agent enrollment</a></div><div class="sidebar-bottom"><div class="connection-indicator"><span class="status-dot"></span><span>Local instance / connected</span></div></div></aside>
+<main class="main-content">
+<header class="topbar"><div><p class="eyebrow">SECURITY OPERATIONS / EVENT RECORD</p><h1>Event details<span style="color:var(--accent)">.</span></h1></div><div class="user-menu"><strong id="current-username">Loading</strong><small id="current-role">—</small><button id="logout-button" class="text-button" type="button">Sign out ↗</button></div></header>
+<section class="dashboard-toolbar"><div><a class="back-link" href="/events">← Back to event feed</a><span id="detail-updated" class="last-updated">Loading event...</span></div><div class="toolbar-actions"><button id="theme-toggle" class="theme-toggle" type="button"><span class="theme-symbol">◐</span><span class="theme-label">LIGHT MODE</span></button><button id="detail-refresh" class="secondary-button" type="button">↻ Refresh</button></div></section>
+<div id="detail-error" class="dashboard-error" role="alert" hidden></div>
+<section id="event-detail-content" hidden>
+<section class="event-detail-hero panel"><div class="event-detail-hero-top"><span id="event-level" class="event-level-pill">LEVEL —</span><span id="event-classification" class="muted">Loading classification</span></div><h2 id="event-title">Loading event...</h2><p id="event-message" class="event-detail-message"></p><div class="event-detail-meta"><span id="event-category"></span><span id="event-source"></span><span id="event-code"></span></div></section>
+<section class="event-detail-grid">
+<article class="panel event-analysis"><div class="panel-heading"><div><h2>Assessment</h2><p class="muted">What this event means</p></div><span class="panel-tag">CONTEXT</span></div><p id="event-assessment" class="event-assessment"></p><div class="assessment-note"><strong>Interpretation</strong><p id="event-guidance"></p></div></article>
+<article class="panel"><div class="panel-heading"><div><h2>Timeline</h2><p class="muted">Event and ingestion times</p></div></div><dl id="event-timeline" class="detail-list"></dl></article>
+<article class="panel event-device"><div class="panel-heading"><div><h2>Reporting device</h2><p class="muted">Endpoint context</p></div></div><h3 id="device-name">—</h3><p id="device-hostname" class="muted"></p><dl id="device-details" class="detail-list"></dl></article>
+<article class="panel event-technical"><div class="panel-heading"><div><h2>Event metadata</h2><p class="muted">Source and identifiers</p></div></div><dl id="event-metadata" class="detail-list"></dl></article>
+</section>
+<section class="panel"><div class="panel-heading"><div><h2>Captured fields</h2><p class="muted">Structured details collected from the source event</p></div><span class="panel-tag">EVENT DATA</span></div><div id="event-fields" class="event-fields"></div><details class="raw-event-details"><summary>View raw event data</summary><pre id="raw-event-data"></pre></details></section>
+</section>
+<footer class="page-footer"><span>BASESENTINEL / LOCAL INSTANCE</span><a href="/events">← Back to event feed</a></footer>
+</main></div>
+<script src="{{ url_for('web.static', filename='js/event-detail.js') }}" defer></script></body></html>

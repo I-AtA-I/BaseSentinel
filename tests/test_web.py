@@ -104,6 +104,19 @@ def test_alerts_page_references_shared_stylesheet(client):
     assert b"/static/css/dashboard.css" in response.data
 
 
+def test_security_event_detail_page_is_available(client):
+    response = client.get("/events/00000000-0000-0000-0000-000000000001")
+    assert response.status_code == 200
+    assert b"Event details" in response.data
+    assert b"/static/js/event-detail.js" in response.data
+
+
+def test_event_detail_javascript_is_available(client):
+    response = client.get("/static/js/event-detail.js")
+    assert response.status_code == 200
+    assert b"DOMContentLoaded" in response.data
+
+
 def test_alerts_javascript_static_file_is_available(client):
     response = client.get("/static/js/alerts.js")
 
