@@ -122,6 +122,7 @@ function renderEvent(event) {
 
     document.title = `${eventTitle(event.event_type)} | BaseSentinel`;
     $("event-title").textContent = eventTitle(event.event_type);
+    $("event-type-heading").textContent = eventTitle(event.event_type);
     $("event-subtitle").textContent =
         `${event.category} · ${event.source}`;
     $("event-level").innerHTML =
