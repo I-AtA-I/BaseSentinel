@@ -4,7 +4,6 @@ import platform
 import queue as thread_queue
 import socket
 import subprocess
-import sys
 import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
