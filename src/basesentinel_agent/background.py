@@ -138,10 +138,11 @@ def start_background_worker(
     if background_status(paths["root"])["running"]:
         raise RuntimeError("The BaseSentinel background agent is already running.")
 
-    try:
-        paths["stop"].unlink()
-    except FileNotFoundError:
-        pass
+    for stale_path in (paths["stop"], paths["pid"]):
+        try:
+            stale_path.unlink()
+        except FileNotFoundError:
+            pass
 
     executable = console_python_executable(python_executable)
     command = [
@@ -181,9 +182,10 @@ def start_background_worker(
         if state["running"]:
             if state["pid"] == process.pid:
                 return process.pid
-            raise RuntimeError(
-                "Another BaseSentinel background agent started at the same time."
-            )
+            if state["pid"] is not None:
+                raise RuntimeError(
+                    "Another BaseSentinel background agent started at the same time."
+                )
 
         exit_code = process.poll()
         if exit_code is not None:
