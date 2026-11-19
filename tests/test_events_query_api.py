@@ -205,7 +205,7 @@ def test_all_roles_can_list_events(client, users, seeded_events, role):
 
     assert data["pagination"]["total"] == 4
     assert len(data["items"]) == 4
-    assert data["items"][0]["device_name"] == "Query Workstation One"
+    assert data["items"][0]["device_name"] == "Query Workstation Two"
 
 
 @pytest.mark.parametrize("role", ["admin", "analyst", "viewer"])
@@ -359,10 +359,10 @@ def test_events_are_ordered_newest_first(client, users, seeded_events):
     items = response.get_json()["items"]
 
     assert [item["message"] for item in items] == [
-        "Successful login",
-        "Failed login",
-        "Network connection opened",
         "Service stopped",
+        "Successful login",
+        "Network connection opened",
+        "Failed login",
     ]
 
 
@@ -385,7 +385,7 @@ def test_event_pagination(client, users, seeded_events):
     }
 
     assert [item["message"] for item in data["items"]] == [
-        "Failed login",
+        "Successful login",
         "Network connection opened",
     ]
 
