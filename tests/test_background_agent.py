@@ -200,3 +200,20 @@ def test_console_python_executable_prefers_python_exe_for_pythonw(monkeypatch, t
     monkeypatch.setattr(background, "os", SimpleNamespace(name="nt"))
 
     assert background.console_python_executable(str(pythonw)) == str(python)
+
+
+def test_windowed_gui_entrypoint_is_registered_and_module_compiles():
+    import tomllib
+    from pathlib import Path
+
+    repository_root = Path(__file__).resolve().parents[1]
+    project = tomllib.loads(
+        (repository_root / "pyproject.toml").read_text(encoding="utf-8")
+    )
+    gui_script = project["project"]["gui-scripts"]["basesentinel-agent-gui"]
+    assert gui_script == "basesentinel_agent.gui:main"
+
+    gui_source = (
+        repository_root / "src" / "basesentinel_agent" / "gui.py"
+    ).read_text(encoding="utf-8")
+    compile(gui_source, "basesentinel_agent/gui.py", "exec")
