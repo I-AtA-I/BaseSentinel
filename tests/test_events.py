@@ -371,3 +371,21 @@ def test_detection_failure_rolls_back_event(app, agent, monkeypatch):
     ).count() == 0
 
     assert Alert.query.count() == 0
+
+
+
+def test_successful_windows_logon_is_normalized_to_level_zero(app, agent):
+    result = EventIngestionService.ingest(
+        agent,
+        make_event(
+            category="authentication",
+            event_type="login.success",
+            severity=2,
+            event_code="4624",
+            source="Windows Security",
+            message="An account was successfully logged on.",
+        ),
+    )
+
+    assert result.event.severity == 0
+    assert Alert.query.count() == 0

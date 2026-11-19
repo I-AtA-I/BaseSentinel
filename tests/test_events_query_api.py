@@ -4,7 +4,7 @@ import uuid
 import pytest
 
 from basesentinel import create_app, db
-from basesentinel.models import Agent, Asset
+from basesentinel.models import Agent, Asset, Alert
 from basesentinel.services import (
     EventIngestionService,
     UserService,
@@ -205,6 +205,7 @@ def test_all_roles_can_list_events(client, users, seeded_events, role):
 
     assert data["pagination"]["total"] == 4
     assert len(data["items"]) == 4
+    assert data["items"][0]["device_name"] == "Query Workstation Two"
 
 
 @pytest.mark.parametrize("role", ["admin", "analyst", "viewer"])
@@ -233,6 +234,9 @@ def test_all_roles_can_view_event_detail(
         "test": True,
         "value": 7,
     }
+    assert data["device"]["display_name"] == "Query Workstation One"
+    assert data["device"]["hostname"] == "query-workstation-one"
+    assert data["device"]["platform"] == "windows"
 
 
 def test_list_does_not_include_event_data(client, users, seeded_events):
@@ -355,10 +359,10 @@ def test_events_are_ordered_newest_first(client, users, seeded_events):
     items = response.get_json()["items"]
 
     assert [item["message"] for item in items] == [
-        "Successful login",
-        "Failed login",
-        "Network connection opened",
         "Service stopped",
+        "Successful login",
+        "Network connection opened",
+        "Failed login",
     ]
 
 
@@ -381,7 +385,7 @@ def test_event_pagination(client, users, seeded_events):
     }
 
     assert [item["message"] for item in data["items"]] == [
-        "Failed login",
+        "Successful login",
         "Network connection opened",
     ]
 
@@ -440,3 +444,55 @@ def test_unknown_event_returns_404(client, users):
     )
 
     assert response.status_code == 404
+
+
+
+def test_filter_by_informational_level_zero(client, users, seeded_events):
+    token = login(client, "viewer")
+    EventIngestionService.ingest(
+        seeded_events["agent_one"],
+        make_event(
+            "authentication",
+            "login.success",
+            0,
+            "2026-11-19T10:00:00Z",
+            "Successful login",
+        ),
+    )
+
+    response = client.get(
+        "/api/v1/events?severity_min=0&severity_max=0",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["pagination"]["total"] == 1
+    assert data["items"][0]["severity"] == 0
+    assert data["items"][0]["event_type"] == "login.success"
+
+
+
+def test_alert_detail_includes_source_event_and_device_context(
+    client,
+    users,
+    seeded_events,
+):
+    token = login(client, "analyst")
+    source_event_id = uuid.UUID(seeded_events["events"]["successful_login"])
+    alert = Alert.query.filter_by(source_event_id=source_event_id).one()
+
+    response = client.get(
+        f"/api/v1/alerts/{alert.id}",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["source_event"]["id"] == str(source_event_id)
+    assert data["source_event"]["event_type"] == "login.success"
+    assert data["source_event"]["event_data"] == {
+        "test": True,
+        "value": 9,
+    }
+    assert data["device"]["display_name"] == "Query Workstation One"

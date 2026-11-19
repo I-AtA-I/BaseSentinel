@@ -360,3 +360,32 @@ def test_drain_sends_existing_queue_without_collecting_new_events(
     assert delivered == [event]
     assert queue.pending() == []
     assert "Delivered 1 queued event(s); pending 0." in capsys.readouterr().out
+
+
+
+def test_successful_logon_is_informational_level_zero(monkeypatch):
+    import subprocess
+    from basesentinel_agent import windows_eventlog
+
+    output = {
+        "LatestRecordId": 120,
+        "Events": [{
+            "Id": 4624,
+            "RecordId": 120,
+            "TimeCreated": "2026-11-19T10:00:00Z",
+            "MachineName": "WORKSTATION",
+            "Message": "An account was successfully logged on.",
+            "Xml": "<Event><EventData><Data Name=\"TargetUserName\">sample</Data></EventData></Event>",
+        }],
+    }
+
+    def fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, json.dumps(output), "")
+
+    monkeypatch.setattr(windows_eventlog.subprocess, "run", fake_run)
+    events, checkpoint = windows_eventlog.collect_security_events()
+
+    assert checkpoint == 120
+    assert len(events) == 1
+    assert events[0]["event_type"] == "login.success"
+    assert events[0]["severity"] == 0

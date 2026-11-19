@@ -262,6 +262,16 @@ class EventIngestionService:
                     "Invalid event code."
                 )
 
+        # Keep successful Windows logons informational even when they
+        # were collected into a local queue by an older agent version.
+        if (
+            source == "Windows Security"
+            and category == "authentication"
+            and event_type == "login.success"
+            and event_code == "4624"
+        ):
+            severity = 0
+
         return {
             "event_uid": cls._parse_event_uid(payload["event_uid"]),
             "schema_version": schema_version,
