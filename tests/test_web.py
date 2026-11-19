@@ -128,4 +128,4 @@ def test_security_events_page_is_available(client):
 def test_security_events_javascript_static_file_is_available(client):
     response = client.get("/static/js/events.js")
     assert response.status_code == 200
-    assert b"initialize" in response.data
+    assert b"DOMContentLoaded" in response.data
