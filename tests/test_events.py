@@ -150,6 +150,35 @@ def test_ingest_returns_existing_event_for_duplicate(app, agent):
     assert SecurityEvent.query.count() == 1
 
 
+def test_duplicate_successful_login_is_reclassified_to_level_zero(app, agent):
+    event_uid = uuid.uuid4()
+    first = EventIngestionService.ingest(
+        agent,
+        make_event(
+            event_uid=event_uid,
+            event_type="login.success",
+            severity=2,
+            event_code="4624",
+        ),
+    )
+    first.event.severity = 2
+    db.session.commit()
+
+    retried = EventIngestionService.ingest(
+        agent,
+        make_event(
+            event_uid=event_uid,
+            event_type="login.success",
+            severity=2,
+            event_code="4624",
+        ),
+    )
+
+    assert retried.duplicate is True
+    assert retried.event.id == first.event.id
+    assert retried.event.severity == 0
+
+
 def test_same_event_uid_is_allowed_for_different_agents(app, agent):
     second_asset = Asset(
         display_name="Second Workstation",

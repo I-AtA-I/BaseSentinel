@@ -357,6 +357,17 @@ class EventIngestionService:
             )
 
             if existing is not None:
+                # A retry can refer to a record first stored by an older agent.
+                # Keep the Level 0 classification consistent after deduplication.
+                if (
+                    existing.category == "authentication"
+                    and existing.event_type == "login.success"
+                    and existing.severity != 0
+                ):
+                    existing.severity = 0
+                    session.commit()
+                    session.refresh(existing)
+
                 return EventIngestionResult(
                     event=existing,
                     duplicate=True,
