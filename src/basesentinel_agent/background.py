@@ -33,6 +33,16 @@ def agent_log_path(data_dir: Path | None = None) -> Path:
     return _paths(data_dir)["log"]
 
 
+def console_python_executable(executable: str | None = None) -> str:
+    """Use python.exe for CLI workers even when this GUI runs under pythonw.exe."""
+    selected = executable or sys.executable
+    if os.name == "nt" and Path(selected).name.lower() == "pythonw.exe":
+        console_executable = Path(selected).with_name("python.exe")
+        if console_executable.is_file():
+            return str(console_executable)
+    return selected
+
+
 def try_acquire_worker_lock(data_dir: Path | None = None) -> BinaryIO | None:
     """Acquire the single-instance lock, or return None when another worker owns it."""
     paths = _paths(data_dir)
@@ -133,7 +143,7 @@ def start_background_worker(
     except FileNotFoundError:
         pass
 
-    executable = python_executable or sys.executable
+    executable = console_python_executable(python_executable)
     command = [
         executable,
         "-u",
