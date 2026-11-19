@@ -472,7 +472,6 @@ class AgentWindow:
 
         self._build_enrollment_card(left)
         self._build_device_card(right)
-        self._build_activity_card(body)
 
     def _build_collection_page(self, page: tk.Frame) -> None:
         self._page_heading(
