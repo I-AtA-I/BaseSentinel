@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 
 _EVENT_MAP = {
-    4624: ("authentication", "login.success", 2),
+    4624: ("authentication", "login.success", 0),
     4625: ("authentication", "login.failed", 7),
     4672: ("authentication", "privilege.special_assignment", 5),
     4720: ("account", "account.created", 7),
