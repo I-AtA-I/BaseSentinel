@@ -290,3 +290,4 @@ def test_event_workspace_sidebar_items_are_interactive():
     assert "command=lambda: self._navigate_to(target)" in source
     assert "ttk.Treeview(" in source
     assert "command=self.drain_backlog" in source
+    assert source.count("self._build_activity_card(body)") == 1
