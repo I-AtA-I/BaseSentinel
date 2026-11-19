@@ -8,6 +8,7 @@ from basesentinel import create_app, db
 from basesentinel.core.security import generate_agent_token, hash_agent_token
 from basesentinel.models import Agent, AgentCredential, Asset, SecurityEvent
 from basesentinel.models.base import utcnow_naive
+from basesentinel.services.users import UserService
 
 
 class TestConfig:
@@ -228,3 +229,34 @@ def test_unknown_agent_token_cannot_ingest_event(client):
 
     assert response.status_code == 401
     assert SecurityEvent.query.count() == 0
+
+
+def test_ingested_event_is_visible_in_user_event_registry(client, agent):
+    payload = make_event()
+    ingested = client.post(
+        "/api/v1/events",
+        json=payload,
+        headers=auth_headers(agent["token"]),
+    )
+    assert ingested.status_code == 201
+
+    UserService.create_user(
+        username="eventviewer",
+        password="test-password-123",
+        role="viewer",
+    )
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"username": "eventviewer", "password": "test-password-123"},
+    )
+    assert login.status_code == 200
+
+    response = client.get(
+        "/api/v1/events?limit=50&offset=0",
+        headers=auth_headers(login.get_json()["token"]),
+    )
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["pagination"]["total"] == 1
+    assert data["items"][0]["event_uid"] == payload["event_uid"]
+    assert data["items"][0]["event_type"] == "login.failed"
