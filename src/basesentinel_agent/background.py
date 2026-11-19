@@ -168,7 +168,6 @@ def start_background_worker(
             flags = (
                 getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
                 | getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
-                | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
             )
             popen_options["creationflags"] = flags
         else:
@@ -180,7 +179,11 @@ def start_background_worker(
     while time.monotonic() < deadline:
         state = background_status(paths["root"])
         if state["running"]:
-            return state["pid"] or process.pid
+            if state["pid"] == process.pid:
+                return process.pid
+            raise RuntimeError(
+                "Another BaseSentinel background agent started at the same time."
+            )
 
         exit_code = process.poll()
         if exit_code is not None:
