@@ -194,7 +194,13 @@ def test_run_command_defaults_to_sixty_second_interval():
 
     args = build_parser().parse_args(["run"])
     assert args.interval == 60.0
-    assert args.batch_size == 50
+    assert args.batch_size == 500
+
+    collect_args = build_parser().parse_args(["collect"])
+    assert collect_args.batch_size == 500
+
+    drain_args = build_parser().parse_args(["drain"])
+    assert drain_args.batch_size == 500
 
 
 @pytest.mark.parametrize("value", ["0", "-1", "nan", "inf", "not-a-number"])
@@ -238,14 +244,119 @@ def test_run_stops_cleanly_on_keyboard_interrupt(monkeypatch, capsys):
     class FakeQueue:
         pass
 
+    class InteractiveInput:
+        @staticmethod
+        def isatty():
+            return True
+
+    class FakeStopEvent:
+        @staticmethod
+        def is_set():
+            return False
+
+        @staticmethod
+        def wait(interval):
+            assert interval == 30
+            raise KeyboardInterrupt
+
     monkeypatch.setattr(cli, "_client_from_config", lambda: FakeClient())
     monkeypatch.setattr(cli, "_queue", lambda: FakeQueue())
-    monkeypatch.setattr(cli, "_run_cycle", lambda *args: (0, 0, 0, 0))
+    monkeypatch.setattr(cli, "_run_cycle", lambda *args, **kwargs: (0, 0, 0, 0))
+    monkeypatch.setattr(cli.sys, "stdin", InteractiveInput())
+    monkeypatch.setattr(cli.threading, "Event", FakeStopEvent)
 
-    def stop_after_cycle(interval):
-        assert interval == 30
-        raise KeyboardInterrupt
-
-    monkeypatch.setattr(cli.time, "sleep", stop_after_cycle)
-    assert cli.run(Namespace(interval=30, batch_size=50)) == 0
+    assert cli.run(Namespace(interval=30, batch_size=500)) == 0
     assert "agent stopped" in capsys.readouterr().out
+
+
+def test_run_stops_when_gui_closes_stdin_pipe(monkeypatch, capsys):
+    import io
+    from argparse import Namespace
+    from basesentinel_agent import cli
+
+    class FakeClient:
+        pass
+
+    class FakeQueue:
+        pass
+
+    monkeypatch.setattr(cli, "_client_from_config", lambda: FakeClient())
+    monkeypatch.setattr(cli, "_queue", lambda: FakeQueue())
+    monkeypatch.setattr(cli, "_run_cycle", lambda *args, **kwargs: (0, 0, 0, 0))
+    monkeypatch.setattr(cli.sys, "stdin", io.StringIO("\\n"))
+
+    assert cli.run(Namespace(interval=30, batch_size=500)) == 0
+    assert "agent stopped" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("value", ["0", "501", "-1", "not-a-number"])
+def test_cli_rejects_invalid_batch_size(value):
+    from basesentinel_agent.cli import build_parser
+
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["collect", "--batch-size", value])
+
+
+def test_collection_pipeline_keeps_events_queued_when_stop_is_requested(
+    monkeypatch,
+    tmp_path,
+):
+    import threading
+    from basesentinel_agent import cli
+
+    queue = EventQueue(tmp_path / "events.sqlite3")
+    event = {"event_uid": str(uuid.uuid4()), "event_type": "login.failed"}
+    stop_event = threading.Event()
+    stop_event.set()
+
+    class FakeClient:
+        def send_event(self, _event):
+            raise AssertionError("No event should be sent after stop is requested.")
+
+    monkeypatch.setattr(
+        cli,
+        "collect_security_events",
+        lambda checkpoint: ([event], 300),
+    )
+
+    result = cli._collect_and_send(
+        FakeClient(),
+        queue,
+        batch_size=500,
+        stop_event=stop_event,
+    )
+
+    assert result == (1, 0, 1, 300)
+    assert queue.pending() == [event]
+
+
+def test_drain_sends_existing_queue_without_collecting_new_events(
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    from argparse import Namespace
+    from basesentinel_agent import cli
+
+    queue = EventQueue(tmp_path / "events.sqlite3")
+    event = {"event_uid": str(uuid.uuid4()), "event_type": "login.failed"}
+    queue.add(event)
+    delivered = []
+
+    class FakeClient:
+        def send_event(self, queued_event):
+            delivered.append(queued_event)
+            return {"event_uid": queued_event["event_uid"]}
+
+    monkeypatch.setattr(cli, "_client_from_config", lambda: FakeClient())
+    monkeypatch.setattr(cli, "_queue", lambda: queue)
+    monkeypatch.setattr(
+        cli,
+        "collect_security_events",
+        lambda *_args: pytest.fail("Drain must not read the Windows event log."),
+    )
+
+    assert cli.drain(Namespace(batch_size=500)) == 0
+    assert delivered == [event]
+    assert queue.pending() == []
+    assert "Delivered 1 queued event(s); pending 0." in capsys.readouterr().out

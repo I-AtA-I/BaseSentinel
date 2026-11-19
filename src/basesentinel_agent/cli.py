@@ -4,7 +4,8 @@ import argparse
 import math
 import platform
 import socket
-import time
+import sys
+import threading
 
 from basesentinel_agent.client import AgentApiError, BaseSentinelClient
 from basesentinel_agent.queue import EventQueue
@@ -36,17 +37,17 @@ def enroll(args) -> int:
     return 0
 
 
-def _collect_and_send(
+def _deliver_pending(
     client: BaseSentinelClient,
     queue: EventQueue,
     batch_size: int,
-) -> tuple[int, int, int, int]:
-    checkpoint = queue.security_checkpoint()
-    discovered, next_checkpoint = collect_security_events(checkpoint)
-    queue.add_batch_and_checkpoint(discovered, next_checkpoint)
-
+    stop_event: threading.Event | None = None,
+) -> tuple[int, int]:
+    """Send a bounded number of queued events and acknowledge successful deliveries."""
     sent = 0
     for event in queue.pending(limit=batch_size):
+        if stop_event is not None and stop_event.is_set():
+            break
         try:
             client.send_event(event)
         except AgentApiError as exc:
@@ -56,8 +57,28 @@ def _collect_and_send(
             continue
         queue.acknowledge(event["event_uid"])
         sent += 1
+        if sent % 50 == 0:
+            print(f"Delivery progress: acknowledged {sent} event(s) in this batch.")
 
-    return len(discovered), sent, len(queue), next_checkpoint
+    return sent, len(queue)
+
+
+def _collect_and_send(
+    client: BaseSentinelClient,
+    queue: EventQueue,
+    batch_size: int,
+    stop_event: threading.Event | None = None,
+) -> tuple[int, int, int, int]:
+    checkpoint = queue.security_checkpoint()
+    discovered, next_checkpoint = collect_security_events(checkpoint)
+    queue.add_batch_and_checkpoint(discovered, next_checkpoint)
+    sent, pending = _deliver_pending(
+        client,
+        queue,
+        batch_size,
+        stop_event=stop_event,
+    )
+    return len(discovered), sent, pending, next_checkpoint
 
 
 def collect(args) -> int:
@@ -72,6 +93,19 @@ def collect(args) -> int:
         f"Collected {discovered} event(s); delivered {sent}; "
         f"pending {pending}; Security log checkpoint {checkpoint}."
     )
+    return 0
+
+
+def drain(args) -> int:
+    """Deliver already queued events without reading the Windows event log."""
+    client = _client_from_config()
+    queue = _queue()
+    sent, pending = _deliver_pending(
+        client,
+        queue,
+        args.batch_size,
+    )
+    print(f"Delivered {sent} queued event(s); pending {pending}.")
     return 0
 
 
@@ -116,10 +150,13 @@ def _run_cycle(
     client: BaseSentinelClient,
     queue: EventQueue,
     batch_size: int,
+    stop_event: threading.Event | None = None,
 ) -> tuple[int, int, int, int]:
     # The authenticated identity request also refreshes the server-side agent heartbeat.
     client.identity()
-    return _collect_and_send(client, queue, batch_size)
+    if stop_event is None:
+        return _collect_and_send(client, queue, batch_size)
+    return _collect_and_send(client, queue, batch_size, stop_event=stop_event)
 
 
 def _positive_interval(value: str) -> float:
@@ -136,21 +173,58 @@ def _positive_interval(value: str) -> float:
     return interval
 
 
+def _batch_size(value: str) -> int:
+    try:
+        batch_size = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            "batch size must be an integer between 1 and 500"
+        ) from None
+    if not 1 <= batch_size <= 500:
+        raise argparse.ArgumentTypeError(
+            "batch size must be an integer between 1 and 500"
+        )
+    return batch_size
+
+
+def _watch_for_stop_request(stream, stop_event: threading.Event) -> None:
+    """Stop a foreground run when its parent closes the stdin control pipe."""
+    try:
+        stream.readline()
+    except (OSError, ValueError):
+        pass
+    finally:
+        stop_event.set()
+
+
 def run(args) -> int:
     client = _client_from_config()
     queue = _queue()
+    stop_event = threading.Event()
+
+    input_stream = sys.stdin
+    is_interactive = getattr(input_stream, "isatty", lambda: True)()
+    if not is_interactive:
+        threading.Thread(
+            target=_watch_for_stop_request,
+            args=(input_stream, stop_event),
+            daemon=True,
+        ).start()
+
     print(
         f"BaseSentinel agent running. Collection interval: "
-        f"{args.interval:g}s. Press Ctrl+C to stop."
+        f"{args.interval:g}s. Delivery limit: {args.batch_size} event(s) per cycle. "
+        "Press Ctrl+C or use the GUI Stop button to stop."
     )
 
     try:
-        while True:
+        while not stop_event.is_set():
             try:
                 discovered, sent, pending, checkpoint = _run_cycle(
                     client,
                     queue,
                     args.batch_size,
+                    stop_event=stop_event,
                 )
                 print(
                     f"Heartbeat OK; collected {discovered}; delivered {sent}; "
@@ -172,10 +246,13 @@ def run(args) -> int:
             except Exception as exc:
                 print(f"Collection cycle failed: {exc}")
 
-            time.sleep(args.interval)
+            if stop_event.wait(args.interval):
+                break
     except KeyboardInterrupt:
-        print("\nBaseSentinel agent stopped.")
-        return 0
+        pass
+
+    print("\nBaseSentinel agent stopped.")
+    return 0
 
 
 def identity(args) -> int:
@@ -201,8 +278,15 @@ def build_parser() -> argparse.ArgumentParser:
         "collect",
         help="Collect and deliver allowlisted Windows Security events.",
     )
-    collect_parser.add_argument("--batch-size", type=int, default=50)
+    collect_parser.add_argument("--batch-size", type=_batch_size, default=500)
     collect_parser.set_defaults(handler=collect)
+
+    drain_parser = commands.add_parser(
+        "drain",
+        help="Deliver queued events without collecting new Windows events.",
+    )
+    drain_parser.add_argument("--batch-size", type=_batch_size, default=500)
+    drain_parser.set_defaults(handler=drain)
 
     diagnostics_parser = commands.add_parser(
         "diagnostics",
@@ -220,7 +304,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=60.0,
         help="Seconds between collection cycles (default: 60).",
     )
-    run_parser.add_argument("--batch-size", type=int, default=50)
+    run_parser.add_argument("--batch-size", type=_batch_size, default=500)
     run_parser.set_defaults(handler=run)
 
     identity_parser = commands.add_parser(

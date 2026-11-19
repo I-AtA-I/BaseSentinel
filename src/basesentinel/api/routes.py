@@ -1248,12 +1248,11 @@ def dashboard_timeline():
 @require_user
 @require_role("admin")
 def get_server_enrollment_settings():
-    settings, initial_secret = ServerEnrollmentService.get_or_create_settings()
+    # The invitation workflow identifies the server by its HTTPS URL.
+    # Keep this legacy settings record internal; clients need no server ID or access code.
+    settings, _ = ServerEnrollmentService.get_or_create_settings()
     response = jsonify({
-        "server_id": settings.server_id,
         "enrollment_mode": settings.enrollment_mode,
-        "connection_password_required": settings.connection_password_hash is not None,
-        "initial_server_secret": initial_secret,
     })
     response.headers["Cache-Control"] = "no-store"
     return response, 200
@@ -1273,9 +1272,7 @@ def update_server_enrollment_settings():
     except ValueError as exc:
         return _error_response("invalid_server_settings", str(exc), 400)
     response = jsonify({
-        "server_id": settings.server_id,
         "enrollment_mode": settings.enrollment_mode,
-        "connection_password_required": settings.connection_password_hash is not None,
     })
     response.headers["Cache-Control"] = "no-store"
     return response, 200
