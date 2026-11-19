@@ -843,6 +843,12 @@ class AgentWindow:
             )
         )
         ready = self.config_loaded and idle_task and not self.background_running
+        self.batch_size_select.configure(
+            state="readonly" if not self.background_running and not self.control_busy else "disabled"
+        )
+        self.interval_entry.configure(
+            state="normal" if not self.background_running and not self.control_busy else "disabled"
+        )
         self.diagnostics_button.configure(state="normal" if ready else "disabled")
         self.collect_button.configure(state="normal" if ready else "disabled")
         self.drain_button.configure(state="normal" if ready else "disabled")
