@@ -205,6 +205,7 @@ def test_all_roles_can_list_events(client, users, seeded_events, role):
 
     assert data["pagination"]["total"] == 4
     assert len(data["items"]) == 4
+    assert data["items"][0]["device_name"] == "Query Workstation One"
 
 
 @pytest.mark.parametrize("role", ["admin", "analyst", "viewer"])
@@ -233,6 +234,9 @@ def test_all_roles_can_view_event_detail(
         "test": True,
         "value": 7,
     }
+    assert data["device"]["display_name"] == "Query Workstation One"
+    assert data["device"]["hostname"] == "query-workstation-one"
+    assert data["device"]["platform"] == "windows"
 
 
 def test_list_does_not_include_event_data(client, users, seeded_events):
@@ -440,3 +444,29 @@ def test_unknown_event_returns_404(client, users):
     )
 
     assert response.status_code == 404
+
+
+
+def test_filter_by_informational_level_zero(client, users, seeded_events):
+    token = login(client, "viewer")
+    EventIngestionService.ingest(
+        seeded_events["agent_one"],
+        make_event(
+            "authentication",
+            "login.success",
+            0,
+            "2026-11-19T10:00:00Z",
+            "Successful login",
+        ),
+    )
+
+    response = client.get(
+        "/api/v1/events?severity_min=0&severity_max=0",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["pagination"]["total"] == 1
+    assert data["items"][0]["severity"] == 0
+    assert data["items"][0]["event_type"] == "login.success"
