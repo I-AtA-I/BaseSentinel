@@ -108,6 +108,20 @@ def test_ingest_valid_event(app, agent):
     assert stored is not None
 
 
+def test_successful_login_is_normalized_to_informational_level(app, agent):
+    result = EventIngestionService.ingest(
+        agent,
+        make_event(
+            category="authentication",
+            event_type="login.success",
+            severity=7,
+            event_code="4624",
+        ),
+    )
+
+    assert result.event.severity == 0
+
+
 def test_ingest_returns_existing_event_for_duplicate(app, agent):
     event_uid = uuid.uuid4()
 

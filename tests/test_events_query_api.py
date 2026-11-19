@@ -130,7 +130,7 @@ def seeded_events(app):
             make_event(
                 "authentication",
                 "login.success",
-                9,
+                0,
                 "2026-11-17T16:00:00Z",
                 "Successful login",
             ),
@@ -203,8 +203,8 @@ def test_all_roles_can_list_events(client, users, seeded_events, role):
 
     data = response.get_json()
 
-    assert data["pagination"]["total"] == 4
-    assert len(data["items"]) == 4
+    assert data["pagination"]["total"] == 3
+    assert len(data["items"]) == 3
 
 
 @pytest.mark.parametrize("role", ["admin", "analyst", "viewer"])
@@ -264,7 +264,7 @@ def test_filter_by_agent_id(client, users, seeded_events):
 
     data = response.get_json()
 
-    assert data["pagination"]["total"] == 3
+    assert data["pagination"]["total"] == 2
 
     assert all(
         item["agent_id"] == str(seeded_events["agent_one"])
@@ -284,7 +284,7 @@ def test_filter_by_category(client, users, seeded_events):
 
     data = response.get_json()
 
-    assert data["pagination"]["total"] == 2
+    assert data["pagination"]["total"] == 1
 
     assert all(
         item["category"] == "authentication"
@@ -320,7 +320,7 @@ def test_filter_by_severity_range(client, users, seeded_events):
 
     data = response.get_json()
 
-    assert data["pagination"]["total"] == 2
+    assert data["pagination"]["total"] == 1
 
     assert all(
         7 <= item["severity"] <= 9
@@ -358,7 +358,6 @@ def test_events_are_ordered_newest_first(client, users, seeded_events):
     items = response.get_json()["items"]
 
     assert [item["message"] for item in items] == [
-        "Successful login",
         "Failed login",
         "Network connection opened",
         "Service stopped",
@@ -380,12 +379,12 @@ def test_event_pagination(client, users, seeded_events):
     assert data["pagination"] == {
         "limit": 2,
         "offset": 1,
-        "total": 4,
+        "total": 3,
     }
 
     assert [item["message"] for item in data["items"]] == [
-        "Failed login",
         "Network connection opened",
+        "Service stopped",
     ]
 
 
@@ -442,7 +441,7 @@ def test_level_zero_is_hidden_by_default_and_available_via_explicit_filter(
 
     default_response = client.get("/api/v1/events", headers=auth_headers(token))
     assert default_response.status_code == 200
-    assert default_response.get_json()["pagination"]["total"] == 4
+    assert default_response.get_json()["pagination"]["total"] == 3
     assert all(item["severity"] >= 1 for item in default_response.get_json()["items"])
 
     level_zero_response = client.get(
@@ -451,7 +450,7 @@ def test_level_zero_is_hidden_by_default_and_available_via_explicit_filter(
     )
     assert level_zero_response.status_code == 200
     data = level_zero_response.get_json()
-    assert data["pagination"]["total"] == 1
+    assert data["pagination"]["total"] == 2
     assert data["items"][0]["severity"] == 0
     assert data["items"][0]["event_type"] == "login.success"
 

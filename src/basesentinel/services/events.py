@@ -262,12 +262,20 @@ class EventIngestionService:
                     "Invalid event code."
                 )
 
+        # Successful sign-ins are retained as audit telemetry, regardless
+        # of the severity value supplied by an older agent version.
+        normalized_severity = (
+            0
+            if category == "authentication" and event_type == "login.success"
+            else severity
+        )
+
         return {
             "event_uid": cls._parse_event_uid(payload["event_uid"]),
             "schema_version": schema_version,
             "category": category,
             "event_type": event_type,
-            "severity": severity,
+            "severity": normalized_severity,
             "source": source,
             "event_code": event_code,
             "message": message,
