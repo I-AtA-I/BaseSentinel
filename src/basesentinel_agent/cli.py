@@ -275,7 +275,7 @@ def background_worker(args) -> int:
 
     pid_path = data_dir / "agent.pid"
     stop_path = data_dir / "agent.stop"
-    worker_pid = str(__import__("os").getpid())
+    worker_pid = str(os.getpid())
     try:
         pid_path.write_text(worker_pid, encoding="ascii")
     except OSError:
