@@ -4,7 +4,7 @@ import uuid
 import pytest
 
 from basesentinel import create_app, db
-from basesentinel.models import Agent, Asset
+from basesentinel.models import Agent, Asset, Alert
 from basesentinel.services import (
     EventIngestionService,
     UserService,
@@ -470,3 +470,29 @@ def test_filter_by_informational_level_zero(client, users, seeded_events):
     assert data["pagination"]["total"] == 1
     assert data["items"][0]["severity"] == 0
     assert data["items"][0]["event_type"] == "login.success"
+
+
+
+def test_alert_detail_includes_source_event_and_device_context(
+    client,
+    users,
+    seeded_events,
+):
+    token = login(client, "analyst")
+    source_event_id = uuid.UUID(seeded_events["events"]["successful_login"])
+    alert = Alert.query.filter_by(source_event_id=source_event_id).one()
+
+    response = client.get(
+        f"/api/v1/alerts/{alert.id}",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["source_event"]["id"] == str(source_event_id)
+    assert data["source_event"]["event_type"] == "login.success"
+    assert data["source_event"]["event_data"] == {
+        "test": True,
+        "value": 9,
+    }
+    assert data["device"]["display_name"] == "Query Workstation One"
