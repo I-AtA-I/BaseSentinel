@@ -183,6 +183,28 @@ class AgentWindow:
             borderwidth=0,
         )
         style.configure(
+            "Queue.Treeview",
+            background=COLORS["log"],
+            fieldbackground=COLORS["log"],
+            foreground=text,
+            borderwidth=0,
+            rowheight=27,
+            font=("Segoe UI", 9),
+        )
+        style.configure(
+            "Queue.Treeview.Heading",
+            background=COLORS["panel_alt"],
+            foreground=muted,
+            borderwidth=0,
+            font=("Segoe UI Semibold", 8),
+            padding=(8, 7),
+        )
+        style.map(
+            "Queue.Treeview",
+            background=[("selected", "#264354")],
+            foreground=[("selected", text)],
+        )
+        style.configure(
             "TNotebook.Tab",
             background=COLORS["panel_alt"],
             foreground=muted,
@@ -247,9 +269,10 @@ class AgentWindow:
         ).pack(anchor="w", pady=(2, 0))
 
         self._side_heading("WORKSPACE")
-        self._side_item("◈", "Endpoint overview", selected=True)
-        self._side_item("⌁", "Event collection")
-        self._side_item("▤", "Local event queue")
+        self.nav_buttons = {}
+        self._side_item("◈", "Endpoint overview", target="overview", selected=True)
+        self._side_item("⌁", "Event collection", target="collection")
+        self._side_item("▤", "Local event queue", target="queue")
 
         self._side_heading("CONNECTION")
         status_row = tk.Frame(self.sidebar, bg=COLORS["sidebar"])
@@ -323,27 +346,62 @@ class AgentWindow:
             font=("Segoe UI Semibold", 8),
         ).pack(anchor="w", pady=(0, 10))
 
-    def _side_item(self, icon: str, text: str, selected: bool = False) -> None:
-        bg = "#142430" if selected else COLORS["sidebar"]
-        fg = COLORS["accent"] if selected else COLORS["muted"]
-        row = tk.Frame(self.sidebar, bg=bg, padx=10, pady=9)
-        row.pack(fill="x", pady=(0, 4))
-        tk.Label(
-            row,
-            text=icon,
-            bg=bg,
-            fg=fg,
-            font=("Segoe UI", 11),
-        ).pack(side="left", padx=(0, 10))
-        tk.Label(
-            row,
-            text=text,
-            bg=bg,
-            fg=COLORS["text"] if selected else COLORS["muted"],
+    def _side_item(
+        self,
+        icon: str,
+        text: str,
+        *,
+        target: str,
+        selected: bool = False,
+    ) -> None:
+        button = tk.Button(
+            self.sidebar,
+            text=f"{icon}  {text}",
+            command=lambda: self._navigate_to(target),
+            anchor="w",
+            bg="#142430" if selected else COLORS["sidebar"],
+            fg=COLORS["accent"] if selected else COLORS["muted"],
+            activebackground="#1b303d",
+            activeforeground=COLORS["text"],
+            relief="flat",
+            borderwidth=0,
+            padx=11,
+            pady=11,
             font=("Segoe UI Semibold" if selected else "Segoe UI", 9),
-        ).pack(side="left")
+            cursor="hand2",
+        )
+        button.pack(fill="x", pady=(0, 4))
+        self.nav_buttons[target] = button
 
     def _build_main(self, parent: tk.Frame) -> None:
+        self.workspace = ttk.Notebook(parent)
+        self.workspace.pack(fill="both", expand=True)
+
+        self.pages = {}
+        for key, label in (
+            ("overview", "Overview"),
+            ("collection", "Event collection"),
+            ("queue", "Local event queue"),
+        ):
+            page = tk.Frame(self.workspace, bg=COLORS["background"], padx=20, pady=16)
+            self.workspace.add(page, text=label)
+            self.pages[key] = page
+
+        self._build_overview_page(self.pages["overview"])
+        self._build_collection_page(self.pages["collection"])
+        self._build_queue_page(self.pages["queue"])
+        self.workspace.bind("<<NotebookTabChanged>>", self._on_workspace_tab_changed)
+        self._update_navigation("overview")
+
+    def _page_heading(
+        self,
+        parent: tk.Frame,
+        overline: str,
+        title: str,
+        subtitle: str,
+        *,
+        show_status: bool = False,
+    ) -> None:
         header = tk.Frame(parent, bg=COLORS["background"])
         header.pack(fill="x", pady=(0, 17))
 
@@ -351,48 +409,57 @@ class AgentWindow:
         title_area.pack(side="left")
         ttk.Label(
             title_area,
-            text="ENDPOINT / OVERVIEW",
+            text=overline,
             style="Overline.TLabel",
         ).pack(anchor="w")
         ttk.Label(
             title_area,
-            text="Endpoint agent",
+            text=title,
             style="Title.TLabel",
         ).pack(anchor="w", pady=(3, 0))
         ttk.Label(
             title_area,
-            text="Manage enrollment, collection and background monitoring.",
+            text=subtitle,
             style="App.TLabel",
         ).pack(anchor="w", pady=(3, 0))
 
-        right_header = tk.Frame(header, bg=COLORS["background"])
-        right_header.pack(side="right", anchor="n")
-        self.header_status = tk.Label(
-            right_header,
-            text="●  CHECKING",
-            bg="#17232c",
-            fg=COLORS["muted"],
-            padx=12,
-            pady=7,
-            font=("Segoe UI Semibold", 8),
-        )
-        self.header_status.pack(anchor="e", pady=(3, 0))
-        ttk.Label(
-            right_header,
-            text="LOCAL WINDOWS DEVICE",
-            style="Overline.TLabel",
-        ).pack(anchor="e", pady=(7, 0))
+        if show_status:
+            right_header = tk.Frame(header, bg=COLORS["background"])
+            right_header.pack(side="right", anchor="n")
+            self.header_status = tk.Label(
+                right_header,
+                text="●  CHECKING",
+                bg="#17232c",
+                fg=COLORS["muted"],
+                padx=12,
+                pady=7,
+                font=("Segoe UI Semibold", 8),
+            )
+            self.header_status.pack(anchor="e", pady=(3, 0))
+            ttk.Label(
+                right_header,
+                text="LOCAL WINDOWS DEVICE",
+                style="Overline.TLabel",
+            ).pack(anchor="e", pady=(7, 0))
 
-        stats = tk.Frame(parent, bg=COLORS["background"])
+    def _build_overview_page(self, page: tk.Frame) -> None:
+        self._page_heading(
+            page,
+            "ENDPOINT / OVERVIEW",
+            "Endpoint agent",
+            "Manage enrollment and review this device's runtime status.",
+            show_status=True,
+        )
+
+        stats = tk.Frame(page, bg=COLORS["background"])
         stats.pack(fill="x", pady=(0, 15))
         for col in range(3):
             stats.grid_columnconfigure(col, weight=1, uniform="stats")
-
         self._stat_card(stats, 0, "AGENT STATUS", self.status_text, "●")
         self._stat_card(stats, 1, "PENDING EVENTS", self.queue_value, "▤")
         self._stat_card(stats, 2, "BACKGROUND PID", self.pid_value, "⌘")
 
-        body = tk.Frame(parent, bg=COLORS["background"])
+        body = tk.Frame(page, bg=COLORS["background"])
         body.pack(fill="both", expand=True)
         body.grid_columnconfigure(0, weight=6, uniform="body")
         body.grid_columnconfigure(1, weight=5, uniform="body")
@@ -405,9 +472,199 @@ class AgentWindow:
         right.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
 
         self._build_enrollment_card(left)
-        self._build_monitoring_card(left)
         self._build_device_card(right)
         self._build_activity_card(body)
+
+    def _build_collection_page(self, page: tk.Frame) -> None:
+        self._page_heading(
+            page,
+            "WORKSPACE / COLLECTION",
+            "Event collection",
+            "Configure and control the detached Windows Security event collector.",
+        )
+
+        stats = tk.Frame(page, bg=COLORS["background"])
+        stats.pack(fill="x", pady=(0, 15))
+        for col in range(3):
+            stats.grid_columnconfigure(col, weight=1, uniform="collection-stats")
+        self._stat_card(stats, 0, "AGENT STATUS", self.status_text, "●")
+        self._stat_card(stats, 1, "PENDING EVENTS", self.queue_value, "▤")
+        self._stat_card(stats, 2, "BACKGROUND PID", self.pid_value, "⌘")
+
+        body = tk.Frame(page, bg=COLORS["background"])
+        body.pack(fill="both", expand=True)
+        body.grid_columnconfigure(0, weight=6, uniform="collection")
+        body.grid_columnconfigure(1, weight=5, uniform="collection")
+        body.grid_rowconfigure(0, weight=0)
+        body.grid_rowconfigure(1, weight=1)
+
+        controls = tk.Frame(body, bg=COLORS["background"])
+        controls.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        self._build_monitoring_card(controls)
+
+        scope = self._panel(
+            body,
+            "Collector scope",
+            "Only the allowlisted Windows Security event types are collected.",
+        )
+        scope.grid(row=0, column=1, sticky="new", padx=(8, 0))
+        tk.Label(
+            scope,
+            text="4624  Successful logon\n4625  Failed logon\n4672  Special privileges assigned\n4720  User account created",
+            bg=COLORS["panel"],
+            fg=COLORS["text"],
+            justify="left",
+            anchor="w",
+            font=("Cascadia Code", 9),
+        ).pack(fill="x", pady=(4, 10))
+        tk.Label(
+            scope,
+            text="The background worker stays visible in Task Manager. It is started only by an explicit action and is not installed as a service or auto-start task.",
+            bg=COLORS["panel_alt"],
+            fg=COLORS["muted"],
+            justify="left",
+            anchor="w",
+            wraplength=300,
+            padx=10,
+            pady=9,
+            font=("Segoe UI", 8),
+        ).pack(fill="x")
+
+        self._build_activity_card(body)
+
+    def _build_queue_page(self, page: tk.Frame) -> None:
+        self._page_heading(
+            page,
+            "WORKSPACE / LOCAL STORAGE",
+            "Local event queue",
+            "Inspect events waiting for delivery to the BaseSentinel server.",
+        )
+
+        panel = self._panel(
+            page,
+            "Pending events",
+            "The table shows the oldest queued events. Refresh after collection or delivery.",
+        )
+        toolbar = tk.Frame(panel, bg=COLORS["panel"])
+        toolbar.pack(fill="x", pady=(0, 10))
+        self.queue_status = tk.StringVar(value="Loading local event queue…")
+        tk.Label(
+            toolbar,
+            textvariable=self.queue_status,
+            bg=COLORS["panel"],
+            fg=COLORS["muted"],
+            font=("Segoe UI", 8),
+        ).pack(side="left", fill="x", expand=True)
+        ttk.Button(
+            toolbar,
+            text="Refresh queue",
+            style="Secondary.TButton",
+            command=self._refresh_queue_table,
+        ).pack(side="right")
+        self.drain_button = ttk.Button(
+            toolbar,
+            text="Drain queue",
+            style="Accent.TButton",
+            command=self.drain_backlog,
+        )
+        self.drain_button.pack(side="right", padx=(0, 8))
+
+        table_frame = tk.Frame(panel, bg=COLORS["panel"])
+        table_frame.pack(fill="both", expand=True)
+        table_frame.grid_rowconfigure(0, weight=1)
+        table_frame.grid_columnconfigure(0, weight=1)
+        columns = ("code", "type", "occurred", "computer", "message")
+        self.queue_table = ttk.Treeview(
+            table_frame,
+            columns=columns,
+            show="headings",
+            height=17,
+            style="Queue.Treeview",
+        )
+        headings = {
+            "code": ("EVENT ID", 80),
+            "type": ("EVENT TYPE", 175),
+            "occurred": ("OCCURRED AT (UTC)", 170),
+            "computer": ("COMPUTER", 130),
+            "message": ("MESSAGE", 360),
+        }
+        for column, (label, width) in headings.items():
+            self.queue_table.heading(column, text=label)
+            self.queue_table.column(column, width=width, minwidth=65, anchor="w")
+        self.queue_table.grid(row=0, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(
+            table_frame,
+            orient="vertical",
+            command=self.queue_table.yview,
+        )
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        self.queue_table.configure(yscrollcommand=scrollbar.set)
+        self._refresh_queue_table()
+
+    def _navigate_to(self, section: str) -> None:
+        page = self.pages.get(section)
+        if page is None:
+            return
+        self.workspace.select(page)
+        self._update_navigation(section)
+        if section == "queue":
+            self._refresh_queue_table()
+
+    def _update_navigation(self, selected: str) -> None:
+        for key, button in self.nav_buttons.items():
+            active = key == selected
+            button.configure(
+                bg="#142430" if active else COLORS["sidebar"],
+                fg=COLORS["accent"] if active else COLORS["muted"],
+                font=("Segoe UI Semibold" if active else "Segoe UI", 9),
+            )
+
+    def _on_workspace_tab_changed(self, _event=None) -> None:
+        selected_page = self.workspace.select()
+        for key, page in self.pages.items():
+            if selected_page == str(page):
+                self._update_navigation(key)
+                if key == "queue":
+                    self._refresh_queue_table()
+                break
+
+    def _refresh_queue_table(self) -> None:
+        try:
+            queue = EventQueue(default_data_dir() / "events.sqlite3")
+            pending = queue.pending(limit=50)
+            total = len(queue)
+        except (RuntimeError, OSError, ValueError) as exc:
+            self.queue_status.set(f"Could not read the local queue: {exc}")
+            self.queue_value.set("Unavailable")
+            return
+
+        self.queue_value.set(f"{total:,} pending")
+        for item in self.queue_table.get_children():
+            self.queue_table.delete(item)
+
+        for index, event in enumerate(pending):
+            event_data = event.get("event_data")
+            if not isinstance(event_data, dict):
+                event_data = {}
+            self.queue_table.insert(
+                "",
+                "end",
+                iid=f"event-{index}",
+                values=(
+                    event.get("event_code", "—"),
+                    event.get("event_type", "—"),
+                    event.get("occurred_at", "—"),
+                    event_data.get("computer", "—"),
+                    str(event.get("message", "—"))[:220],
+                ),
+            )
+
+        if total:
+            self.queue_status.set(
+                f"Showing {len(pending)} oldest event(s) of {total:,} pending."
+            )
+        else:
+            self.queue_status.set("The local event queue is empty.")
 
     def _stat_card(
         self,
@@ -626,13 +883,6 @@ class AgentWindow:
             command=self.collect_now,
         )
         self.collect_button.pack(side="left", padx=(6, 0))
-        self.drain_button = ttk.Button(
-            tools,
-            text="Drain queue",
-            style="Secondary.TButton",
-            command=self.drain_backlog,
-        )
-        self.drain_button.pack(side="left", padx=(6, 0))
 
     def _build_device_card(self, parent: tk.Frame) -> None:
         panel = self._panel(
@@ -804,6 +1054,8 @@ class AgentWindow:
         self.background_running = state["running"]
         self.pid_value.set(str(state["pid"]) if state["pid"] else "—")
         self.queue_value.set(f"{pending:,} pending")
+        if self.workspace.select() == str(self.pages["queue"]):
+            self._refresh_queue_table()
         self.status_text.set("Running" if self.background_running else "Stopped")
 
         if self.background_running:
@@ -935,7 +1187,7 @@ class AgentWindow:
             return
 
         command = [
-            sys.executable,
+            console_python_executable(),
             "-u",
             "-m",
             "basesentinel_agent.cli",
