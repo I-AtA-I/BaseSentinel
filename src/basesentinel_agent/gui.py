@@ -502,12 +502,13 @@ class AgentWindow:
         controls.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
         self._build_monitoring_card(controls)
 
+        scope_parent = tk.Frame(body, bg=COLORS["background"])
+        scope_parent.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
         scope = self._panel(
-            body,
+            scope_parent,
             "Collector scope",
             "Only the allowlisted Windows Security event types are collected.",
         )
-        scope.grid(row=0, column=1, sticky="new", padx=(8, 0))
         tk.Label(
             scope,
             text="4624  Successful logon\n4625  Failed logon\n4672  Special privileges assigned\n4720  User account created",
