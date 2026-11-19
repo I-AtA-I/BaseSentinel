@@ -189,7 +189,7 @@ function renderAlerts() {
             let actions = '<span class="read-only-label">Read only</span>';
 
             if (canManage && alert.status === "open") {
-                actions = `<button class="action-button" data-action="acknowledge" data-id="${escapeHtml(alert.id)}">Acknowledge</button>`;
+                actions = `<button class="action-button" data-action="acknowledge" data-id="${escapeHtml(alert.id)}">Acknowledge</button> <button class="action-button" data-action="resolve" data-id="${escapeHtml(alert.id)}">Resolve</button>`;
             } else if (canManage && alert.status === "acknowledged") {
                 actions = `<button class="action-button" data-action="resolve" data-id="${escapeHtml(alert.id)}">Resolve</button>`;
             } else if (canManage && alert.status === "resolved") {
