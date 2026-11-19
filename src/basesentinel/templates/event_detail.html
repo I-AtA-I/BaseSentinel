@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Event details | BaseSentinel</title>
+    <link rel="stylesheet" href="{{ url_for('web.static', filename='css/dashboard.css') }}">
+</head>
+<body>
+<div class="app-shell">
+    <aside class="sidebar">
+        <a class="brand" href="/">
+            <span class="brand-mark">B</span>
+            <span><strong>BASESENTINEL</strong><small>LOCAL SECURITY SYSTEM</small></span>
+        </a>
+        <div class="sidebar-section">
+            <span class="sidebar-label">OPERATIONS / 01</span>
+            <a class="nav-link" href="/">◈ Overview</a>
+            <a class="nav-link active" href="/events">⌁ Security events</a>
+            <a class="nav-link" href="/alerts">△ Alerts</a>
+            <a class="nav-link" href="/agents">▦ Clients</a>
+            <a class="nav-link" href="/settings/enrollment">⚙ Agent enrollment</a>
+        </div>
+        <div class="sidebar-bottom">
+            <div class="connection-indicator"><span class="status-dot"></span><span>Local instance / connected</span></div>
+        </div>
+    </aside>
+
+    <main class="main-content" id="event-detail-root" data-event-id="{{ event_id }}">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">SECURITY OPERATIONS / EVENT DETAILS</p>
+                <h1 id="event-title">Loading event<span style="color:var(--accent)">.</span></h1>
+                <p id="event-subtitle" class="muted">Loading source context...</p>
+            </div>
+            <div class="user-menu">
+                <strong id="current-username">Loading</strong>
+                <small id="current-role">—</small>
+                <button id="logout-button" class="text-button" type="button">Sign out ↗</button>
+            </div>
+        </header>
+
+        <section class="dashboard-toolbar">
+            <div><a class="secondary-button event-back-link" href="/events">← Back to event registry</a></div>
+            <div class="toolbar-actions">
+                <button id="theme-toggle" class="theme-toggle" type="button">
+                    <span class="theme-symbol">◐</span><span class="theme-label">LIGHT MODE</span>
+                </button>
+            </div>
+        </section>
+
+        <div id="event-error" class="dashboard-error" role="alert" hidden></div>
+
+        <div id="event-detail-content" class="event-detail-content" hidden>
+            <section class="event-detail-hero panel">
+                <div>
+                    <p class="eyebrow">OBSERVED EVENT</p>
+                    <h2 id="event-type-heading">Event context</h2>
+                    <p id="event-message" class="event-message"></p>
+                </div>
+                <div id="event-level" class="event-level"></div>
+            </section>
+
+            <div class="event-detail-columns">
+                <section class="panel event-detail-panel">
+                    <div class="panel-heading"><div><h2>Event information</h2><p class="muted">What the collector recorded</p></div></div>
+                    <dl class="event-detail-list">
+                        <div><dt>Category</dt><dd id="event-category">—</dd></div>
+                        <div><dt>Event type</dt><dd id="event-type">—</dd></div>
+                        <div><dt>Source</dt><dd id="event-source">—</dd></div>
+                        <div><dt>Windows event ID</dt><dd id="event-code">—</dd></div>
+                        <div><dt>Schema version</dt><dd id="event-schema">—</dd></div>
+                    </dl>
+                </section>
+
+                <section class="panel event-detail-panel">
+                    <div class="panel-heading"><div><h2>Device</h2><p class="muted">Endpoint that reported the event</p></div></div>
+                    <h3 id="device-name" class="event-device-heading">—</h3>
+                    <dl class="event-detail-list">
+                        <div><dt>Hostname</dt><dd id="device-hostname">—</dd></div>
+                        <div><dt>Platform</dt><dd id="device-platform">—</dd></div>
+                        <div><dt>Agent version</dt><dd id="device-agent-version">—</dd></div>
+                        <div><dt>Architecture</dt><dd id="device-architecture">—</dd></div>
+                        <div><dt>Agent status</dt><dd id="device-status">—</dd></div>
+                        <div><dt>Enrolled</dt><dd id="device-enrolled">—</dd></div>
+                        <div><dt>Last check-in</dt><dd id="device-last-checkin">—</dd></div>
+                        <div><dt>Agent ID</dt><dd id="device-id" class="event-mono">—</dd></div>
+                    </dl>
+                </section>
+            </div>
+
+            <section class="panel event-detail-panel">
+                <div class="panel-heading"><div><h2>Event timeline</h2><p class="muted">When it happened and when BaseSentinel received it</p></div></div>
+                <div class="event-timeline">
+                    <div><span class="timeline-marker"></span><div><small>Occurred on device</small><strong id="event-occurred">—</strong></div></div>
+                    <div><span class="timeline-marker timeline-marker-secondary"></span><div><small>Received by server</small><strong id="event-received">—</strong></div></div>
+                </div>
+            </section>
+
+            <section class="panel event-detail-panel">
+                <div class="panel-heading"><div><h2>Collected evidence</h2><p class="muted">Structured fields extracted from the original event</p></div><span class="panel-tag">EVENT DATA</span></div>
+                <div class="table-scroll">
+                    <table class="event-evidence-table">
+                        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+                        <tbody id="event-data-table"><tr><td colspan="2" class="table-empty">Loading evidence...</td></tr></tbody>
+                    </table>
+                </div>
+                <details class="event-raw-data">
+                    <summary>View raw structured data (JSON)</summary>
+                    <pre id="event-data-raw">{}</pre>
+                </details>
+            </section>
+
+            <section class="panel event-detail-panel event-identifiers">
+                <div class="panel-heading"><div><h2>Record identifiers</h2><p class="muted">Useful when correlating this event with other logs</p></div></div>
+                <dl class="event-detail-list">
+                    <div><dt>Server event ID</dt><dd id="event-id" class="event-mono">—</dd></div>
+                    <div><dt>Agent event UID</dt><dd id="event-uid" class="event-mono">—</dd></div>
+                </dl>
+            </section>
+        </div>
+
+        <footer class="page-footer">
+            <span>BASESENTINEL / LOCAL INSTANCE</span>
+            <a href="/events">← Back to event registry</a>
+        </footer>
+    </main>
+</div>
+<script src="{{ url_for('web.static', filename='js/event-detail.js') }}" defer></script>
+</body>
+</html>
