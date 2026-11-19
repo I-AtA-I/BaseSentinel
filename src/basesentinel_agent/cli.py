@@ -290,7 +290,7 @@ def background_worker(args) -> int:
             if stop_path.exists():
                 try:
                     stop_path.unlink()
-                except FileNotFoundError:
+                except OSError:
                     pass
                 stop_event.set()
                 break
@@ -305,15 +305,17 @@ def background_worker(args) -> int:
     finally:
         stop_event.set()
         try:
-            stop_path.unlink()
-        except FileNotFoundError:
-            pass
-        try:
-            if pid_path.read_text(encoding="ascii").strip() == worker_pid:
-                pid_path.unlink()
-        except FileNotFoundError:
-            pass
-        release_worker_lock(lock)
+            try:
+                stop_path.unlink()
+            except OSError:
+                pass
+            try:
+                if pid_path.read_text(encoding="ascii").strip() == worker_pid:
+                    pid_path.unlink()
+            except OSError:
+                pass
+        finally:
+            release_worker_lock(lock)
 
 
 def start_background(args) -> int:
