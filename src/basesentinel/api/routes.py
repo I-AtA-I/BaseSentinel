@@ -21,7 +21,7 @@ from basesentinel.api.decorators import require_agent, require_user
 from basesentinel.api.permissions import require_role
 from basesentinel.models import (
     Agent, AgentCredential, AgentInvitation, PairingCode,
-    AssetAddress, AssetInterface,
+    Asset, AssetAddress, AssetInterface,
 )
 from basesentinel.services.credentials import (
     AgentCredentialService,
@@ -524,7 +524,7 @@ def delete_agent(agent_id):
             db.session.execute(
                 delete(AssetInterface).where(AssetInterface.asset_id == asset_id)
             )
-            asset = db.session.get(__import__("basesentinel.models", fromlist=["Asset"]).Asset, asset_id)
+            asset = db.session.get(Asset, asset_id)
             if asset is not None:
                 db.session.delete(asset)
                 asset_deleted = True
