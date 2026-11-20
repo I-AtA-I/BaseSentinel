@@ -8,17 +8,7 @@
 </head>
 <body>
 <div class="app-shell">
-    <aside class="sidebar">
-        <a class="brand" href="/"><span class="brand-mark">B</span><span><strong>BASESENTINEL</strong><small>LOCAL SECURITY SYSTEM</small></span></a>
-        <div class="sidebar-section">
-            <span class="sidebar-label">OPERATIONS</span>
-            <a class="nav-link" href="/">◈ Overview</a>
-            <a class="nav-link" href="/events">⌁ Security events</a>
-            <a class="nav-link active" href="/agents">▦ Clients</a>
-            <a class="nav-link" href="/alerts">△ Alerts</a>
-            <a class="nav-link" href="/settings/enrollment">⚙ Agent enrollment</a>
-        </div>
-    </aside>
+    {% include "_sidebar.html" %}
     <main class="main-content">
         <header class="topbar">
             <div><p class="eyebrow">ENDPOINT MANAGEMENT</p><h1>Clients<span style="color:var(--accent)">.</span></h1></div>

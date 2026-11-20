@@ -152,7 +152,7 @@ function renderEvents() {
                     <td><span class="severity-label ${severityClass(event.severity)}">Level ${Number(event.severity)} · ${severityName(event.severity)}</span></td>
                     <td>${escapeHtml(category)}</td>
                     <td>
-                        <strong class="event-device-name">${escapeHtml(device)}</strong>
+                        <a class="event-device-name" href="/agents/${encodeURIComponent(event.agent_id)}">${escapeHtml(device)}</a>
                         <small class="event-device-id">${escapeHtml(String(event.agent_id || "").slice(0, 8))}…</small>
                     </td>
                     <td>${escapeHtml(formatDate(event.received_at))}</td>
@@ -170,6 +170,34 @@ function renderEvents() {
         state.offset + state.limit >= state.total;
 }
 
+function renderTimeline(timeline) {
+    const container = $("timeline-chart");
+    const buckets = timeline.buckets || [];
+    $("timeline-granularity").textContent = String(timeline.granularity || "—").replace("_", " ");
+    if (!buckets.length) { container.innerHTML = '<div class="chart-placeholder">No timeline data available for this period.</div>'; return; }
+    const width=900, height=220, left=38, right=12, top=14, bottom=30;
+    const plotWidth=width-left-right, plotHeight=height-top-bottom;
+    const maxValue=Math.max(1,...buckets.map(b=>Math.max(b.event_count,b.alerts_created)));
+    const step=plotWidth/buckets.length, barWidth=Math.max(2,Math.min(16,step*.55));
+    const grid=[0,.25,.5,.75,1].map(r=>{const y=top+plotHeight*r,v=Math.round(maxValue*(1-r));return '<line x1="'+left+'" y1="'+y+'" x2="'+(width-right)+'" y2="'+y+'" stroke="var(--line)"/><text x="'+(left-9)+'" y="'+(y+4)+'" fill="var(--muted)" font-size="10" text-anchor="end">'+v+'</text>';}).join("");
+    const bars=buckets.map((b,i)=>{const x=left+i*step+(step-barWidth)/2,eh=b.event_count/maxValue*plotHeight,ah=b.alerts_created/maxValue*plotHeight,ey=top+plotHeight-eh,ay=top+plotHeight-ah;return '<rect x="'+x+'" y="'+ey+'" width="'+barWidth+'" height="'+Math.max(0,eh)+'" fill="var(--chart-event)"><title>'+escapeHtml(formatDate(b.start))+': '+b.event_count+' events</title></rect>'+(b.alerts_created>0?'<rect x="'+x+'" y="'+ay+'" width="'+barWidth+'" height="'+Math.max(0,ah)+'" fill="var(--chart-alert)"><title>'+b.alerts_created+' alerts created</title></rect>':"");}).join("");
+    const labels=buckets.map((b,i)=>{if(buckets.length>24&&i%Math.ceil(buckets.length/8)!==0)return "";const x=left+i*step+step/2,d=new Date(b.start),label=timeline.granularity==="day"?d.toLocaleDateString(undefined,{day:"2-digit",month:"short"}):d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"});return '<text x="'+x+'" y="'+(height-7)+'" fill="var(--muted)" font-size="10" text-anchor="middle">'+escapeHtml(label)+'</text>';}).join("");
+    container.innerHTML='<svg viewBox="0 0 '+width+' '+height+'" role="img" aria-label="Event and alert activity timeline">'+grid+bars+labels+'</svg>';
+}
+
+async function loadTimeline() {
+    $("timeline-chart").innerHTML='<div class="chart-placeholder">Loading timeline...</div>';
+    try { const result=await apiRequest('/dashboard/timeline?period_hours='+encodeURIComponent($("timeline-period").value)); renderTimeline(result); }
+    catch(error) { $("timeline-chart").innerHTML='<div class="chart-placeholder">'+escapeHtml(error.message||"Unable to load timeline.")+'</div>'; }
+}
+
+function showEventsView(view) {
+    const timeline=view==="timeline";
+    $("events-view").hidden=timeline; $("timeline-view").hidden=!timeline;
+    $("show-events-view").classList.toggle("active",!timeline); $("show-timeline-view").classList.toggle("active",timeline);
+    $("show-events-view").setAttribute("aria-pressed",String(!timeline)); $("show-timeline-view").setAttribute("aria-pressed",String(timeline));
+    if(timeline) loadTimeline();
+}
 async function loadEvents() {
     if (state.busy) return;
     state.busy = true;
@@ -248,7 +276,13 @@ async function initializeEvents() {
         applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
     });
     $("logout-button").addEventListener("click", logout);
-    $("refresh-button").addEventListener("click", loadEvents);
+    $("refresh-button").addEventListener("click", () => {
+        if (!$("timeline-view").hidden) loadTimeline();
+        else loadEvents();
+    });
+    $("show-events-view").addEventListener("click", () => showEventsView("events"));
+    $("show-timeline-view").addEventListener("click", () => showEventsView("timeline"));
+    $("timeline-period").addEventListener("change", () => { if (!$("timeline-view").hidden) loadTimeline(); });
 
     $("apply-filters").addEventListener("click", () => {
         state.offset = 0;

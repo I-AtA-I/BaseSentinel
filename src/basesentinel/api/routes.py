@@ -1299,6 +1299,47 @@ def resolve_alert(alert_id):
 
     return response, 200
 
+@api.delete("/alerts")
+@require_user
+@require_role("admin")
+def delete_all_alerts():
+    """Permanently remove every alert while preserving source events."""
+    try:
+        deleted = db.session.execute(delete(Alert)).rowcount or 0
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+
+    response = jsonify({"deleted": deleted})
+    response.headers["Cache-Control"] = "no-store"
+    return response, 200
+
+
+@api.delete("/alerts/<alert_id>")
+@require_user
+@require_role("admin")
+def delete_alert(alert_id):
+    parsed_id = _parse_uuid(alert_id)
+    if parsed_id is None:
+        return _error_response("invalid_alert_id", "Invalid alert ID.", 400)
+
+    alert = db.session.get(Alert, parsed_id)
+    if alert is None:
+        return _error_response("alert_not_found", "Alert not found.", 404)
+
+    try:
+        db.session.delete(alert)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+
+    response = jsonify({"alert_id": str(parsed_id), "deleted": True})
+    response.headers["Cache-Control"] = "no-store"
+    return response, 200
+
+
 @api.get("/dashboard/overview")
 @require_user
 def dashboard_overview():

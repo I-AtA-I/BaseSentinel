@@ -3,34 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Security events | BaseSentinel</title>
+    <title>Events | BaseSentinel</title>
     <link rel="stylesheet" href="{{ url_for('web.static', filename='css/dashboard.css') }}">
 </head>
 <body>
 <div class="app-shell">
-    <aside class="sidebar">
-        <a class="brand" href="/">
-            <span class="brand-mark">B</span>
-            <span><strong>BASESENTINEL</strong><small>LOCAL SECURITY SYSTEM</small></span>
-        </a>
-        <div class="sidebar-section">
-            <span class="sidebar-label">OPERATIONS / 01</span>
-            <a class="nav-link" href="/">◈ Overview</a>
-            <a class="nav-link active" href="/events">⌁ Security events</a>
-            <a class="nav-link" href="/alerts">△ Alerts</a>
-            <a class="nav-link" href="/agents">▦ Clients</a>
-            <a class="nav-link" href="/settings/enrollment">⚙ Agent enrollment</a>
-        </div>
-        <div class="sidebar-bottom">
-            <div class="connection-indicator"><span class="status-dot"></span><span>Local instance / connected</span></div>
-        </div>
-    </aside>
+    {% include "_sidebar.html" %}
 
     <main class="main-content">
         <header class="topbar">
             <div>
-                <p class="eyebrow">SECURITY OPERATIONS / EVENT REGISTRY</p>
-                <h1>Security events<span style="color:var(--accent)">.</span></h1>
+                <p class="eyebrow">SECURITY OPERATIONS / EVENTS</p>
+                <h1>Events<span style="color:var(--accent)">.</span></h1>
             </div>
             <div class="user-menu">
                 <strong id="current-username">Loading</strong>
@@ -54,6 +38,30 @@
 
         <div id="events-error" class="dashboard-error" role="alert" hidden></div>
 
+        <section class="dashboard-toolbar view-toolbar" aria-label="Event views">
+            <div class="view-switch">
+                <button id="show-events-view" class="view-switch-button active" type="button" aria-pressed="true">Events</button>
+                <button id="show-timeline-view" class="view-switch-button" type="button" aria-pressed="false">Timeline</button>
+            </div>
+            <label class="timeline-period-control" for="timeline-period">Timeline range
+                <select id="timeline-period">
+                    <option value="24">24 hours</option>
+                    <option value="168" selected>7 days</option>
+                    <option value="720">30 days</option>
+                </select>
+            </label>
+        </section>
+
+        <section id="timeline-view" class="panel timeline-panel" hidden>
+            <div class="panel-heading">
+                <div><h2>Activity timeline</h2><p class="muted">Events received and alerts created over time.</p></div>
+                <span id="timeline-granularity" class="panel-tag">—</span>
+            </div>
+            <div class="chart-legend"><span><i class="legend-dot events-legend"></i> Events</span><span><i class="legend-dot alerts-legend"></i> Alerts created</span></div>
+            <div id="timeline-chart" class="chart-container"><div class="chart-placeholder">Loading timeline...</div></div>
+        </section>
+
+        <section id="events-view" class="events-view-content">
         <section class="metric-grid">
             <article class="metric-card">
                 <div class="metric-heading"><span>Matching events</span></div>
@@ -149,6 +157,8 @@
                     <button id="page-last" type="button" aria-label="Last page">»</button>
                 </div>
             </div>
+        </section>
+
         </section>
 
         <footer class="page-footer">
