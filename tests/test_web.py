@@ -191,8 +191,8 @@ def test_dashboard_drilldown_links_are_available(client):
     assert response.status_code == 200
     javascript = client.get("/static/js/dashboard.js")
     assert javascript.status_code == 200
-    assert b"/agents/\${encodeURIComponent(agent.agent_id)}" in javascript.data
-    assert b"severity_min=\${item.severity}" in javascript.data
+    assert b"/agents/${encodeURIComponent(agent.agent_id)}" in javascript.data
+    assert b"severity_min=${item.severity}" in javascript.data
 
 
 def test_events_page_supports_severity_drilldown_context(client):
