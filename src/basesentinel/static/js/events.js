@@ -9,6 +9,8 @@ const state = {
     total: 0,
     items: [],
     busy: false,
+    severityMin: null,
+    severityMax: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -218,13 +220,18 @@ async function loadEvents() {
         const category = $("filter-category").value;
         if (category) params.set("category", category);
 
-        const level = $("filter-level").value;
-        if (level === "info") {
-            params.set("severity_min", "0");
-            params.set("severity_max", "0");
+        if (state.severityMin !== null && state.severityMax !== null) {
+            params.set("severity_min", String(state.severityMin));
+            params.set("severity_max", String(state.severityMax));
         } else {
-            params.set("severity_min", "1");
-            params.set("severity_max", "10");
+            const level = $("filter-level").value;
+            if (level === "info") {
+                params.set("severity_min", "0");
+                params.set("severity_max", "0");
+            } else {
+                params.set("severity_min", "1");
+                params.set("severity_max", "10");
+            }
         }
 
         const result = await apiRequest(`/events?${params.toString()}`);
@@ -271,6 +278,28 @@ async function initializeEvents() {
         return;
     }
 
+    const query = new URLSearchParams(window.location.search);
+    const severityMin = Number(query.get("severity_min"));
+    const severityMax = Number(query.get("severity_max"));
+    if (
+        query.has("severity_min") &&
+        query.has("severity_max") &&
+        Number.isInteger(severityMin) &&
+        Number.isInteger(severityMax) &&
+        severityMin >= 0 &&
+        severityMax <= 10 &&
+        severityMin <= severityMax
+    ) {
+        state.severityMin = severityMin;
+        state.severityMax = severityMax;
+        $("severity-filter-label").textContent = severityMin === severityMax
+            ? `Level ${severityMin}`
+            : `Levels ${severityMin}–${severityMax}`;
+        $("severity-alerts-link").href =
+            `/alerts?severity_min=${severityMin}&severity_max=${severityMax}`;
+        $("severity-filter-context").hidden = false;
+    }
+
     applyTheme(document.documentElement.dataset.theme || "dark");
     $("theme-toggle").addEventListener("click", () => {
         applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
@@ -291,6 +320,9 @@ async function initializeEvents() {
     });
 
     $("filter-level").addEventListener("change", () => {
+        state.severityMin = null;
+        state.severityMax = null;
+        $("severity-filter-context").hidden = true;
         state.offset = 0;
         loadEvents();
     });
@@ -307,6 +339,9 @@ async function initializeEvents() {
     $("clear-filters").addEventListener("click", () => {
         $("filter-category").value = "";
         $("filter-level").value = "security";
+        state.severityMin = null;
+        state.severityMax = null;
+        $("severity-filter-context").hidden = true;
         $("filter-limit").value = "25";
         state.offset = 0;
         state.limit = 25;
