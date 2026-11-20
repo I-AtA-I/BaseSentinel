@@ -276,7 +276,10 @@ async function initializeEvents() {
         applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
     });
     $("logout-button").addEventListener("click", logout);
-    $("refresh-button").addEventListener("click", loadEvents);
+    $("refresh-button").addEventListener("click", () => {
+        if (!$("timeline-view").hidden) loadTimeline();
+        else loadEvents();
+    });
     $("show-events-view").addEventListener("click", () => showEventsView("events"));
     $("show-timeline-view").addEventListener("click", () => showEventsView("timeline"));
     $("timeline-period").addEventListener("change", () => { if (!$("timeline-view").hidden) loadTimeline(); });
