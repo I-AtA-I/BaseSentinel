@@ -195,6 +195,9 @@ function renderAlerts() {
             } else if (canManage && alert.status === "resolved") {
                 actions = '<span class="read-only-label">Closed</span>';
             }
+            if (state.user?.role === "admin") {
+                actions += ` <button class="action-button action-danger" data-delete-alert="${escapeHtml(alert.id)}">Delete</button>`;
+            }
 
             return `
                 <tr>
@@ -216,6 +219,7 @@ function renderAlerts() {
     container.querySelectorAll("[data-action]").forEach((button) => {
         button.addEventListener("click", () => transitionAlert(button));
     });
+    container.querySelectorAll("[data-delete-alert]").forEach((button) => button.addEventListener("click", () => deleteAlert(button)));
 
     document.getElementById("result-summary").textContent =
         `${formatNumber(state.total)} matching alert${state.total === 1 ? "" : "s"} · ${formatNumber(visible.length)} visible on this page`;
@@ -310,6 +314,34 @@ async function transitionAlert(button) {
     }
 }
 
+async function deleteAlert(button) {
+    const alertId = button.dataset.deleteAlert;
+    if (!window.confirm("Permanently delete this alert? The source security event will be preserved.")) return;
+    button.disabled = true;
+    try {
+        await apiRequest("/alerts/" + encodeURIComponent(alertId), {method: "DELETE"});
+        await loadAlerts();
+    } catch (error) {
+        showError(error.message || "Unable to delete alert.");
+        button.disabled = false;
+    }
+}
+
+async function flushAllAlerts() {
+    const confirmed = window.confirm("FLUSH ALL ALERTS?\n\nThis permanently deletes every alert. Security events and device records remain. This cannot be undone.");
+    if (!confirmed) return;
+    const button = document.getElementById("flush-alerts-button");
+    button.disabled = true;
+    try {
+        const result = await apiRequest("/alerts", {method: "DELETE"});
+        state.offset = 0;
+        showError("");
+        document.getElementById("result-summary").textContent = "Deleted " + formatNumber(result.deleted) + " alerts. Source events were preserved.";
+        await loadAlerts();
+    } catch (error) {
+        showError(error.message || "Unable to flush alerts.");
+    } finally { button.disabled = false; }
+}
 async function logout() {
     try {
         await apiRequest("/auth/logout", { method: "POST" });
@@ -341,6 +373,11 @@ async function initializeAlerts() {
     try {
         const user = await apiRequest("/auth/me");
         state.user = { username: user.username, role: user.role };
+        const flushButton = document.getElementById("flush-alerts-button");
+        if (user.role === "admin") {
+            flushButton.hidden = false;
+            flushButton.addEventListener("click", flushAllAlerts);
+        }
 
         document.getElementById("current-username").textContent = user.username;
         document.getElementById("current-role").textContent = user.role;
