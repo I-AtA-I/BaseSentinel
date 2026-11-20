@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Device details | BaseSentinel</title>
+    <link rel="stylesheet" href="{{ url_for('web.static', filename='css/dashboard.css') }}">
+    <script>
+        (() => { try { const saved=localStorage.getItem("basesentinel_theme"); if(saved==="light"||saved==="dark") document.documentElement.dataset.theme=saved; } catch (_) {} })();
+    </script>
+</head>
+<body>
+<div class="app-shell">
+    {% include "_sidebar.html" %}
+    <main class="main-content" id="device-detail-root" data-agent-id="{{ agent_id }}">
+        <header class="topbar">
+            <div><p class="eyebrow">ENDPOINT INVENTORY / DEVICE DETAILS</p><h1 id="device-title">Loading device<span style="color:var(--accent)">.</span></h1><p id="device-subtitle" class="muted">Loading endpoint activity...</p></div>
+            <div class="user-menu"><strong id="current-username">Loading</strong><small id="current-role">—</small><button id="logout-button" class="text-button" type="button">Sign out ↗</button></div>
+        </header>
+        <section class="dashboard-toolbar">
+            <div><a class="secondary-button" href="/agents">← Back to clients</a></div>
+            <div class="toolbar-actions"><button id="theme-toggle" class="theme-toggle" type="button"><span class="theme-symbol">◐</span><span class="theme-label">LIGHT MODE</span></button><button id="refresh-device" class="secondary-button" type="button">↻ Refresh</button></div>
+        </section>
+        <div id="device-error" class="dashboard-error" role="alert" hidden></div>
+        <section class="metric-grid">
+            <article class="metric-card"><div class="metric-heading"><span>Events</span></div><strong id="device-event-count" class="metric-value">—</strong><span class="metric-description">Latest 100 matching records</span></article>
+            <article class="metric-card"><div class="metric-heading"><span>Alerts</span></div><strong id="device-alert-count" class="metric-value">—</strong><span class="metric-description">Latest 100 matching detections</span></article>
+            <article class="metric-card"><div class="metric-heading"><span>Agent status</span></div><strong id="device-status" class="metric-value" style="font-size:22px">—</strong><span class="metric-description">Current endpoint status</span></article>
+            <article class="metric-card"><div class="metric-heading"><span>Last check-in</span></div><strong id="device-checkin" class="metric-value" style="font-size:17px">—</strong><span class="metric-description">Most recent agent heartbeat</span></article>
+        </section>
+        <section class="panel">
+            <div class="panel-heading"><div><h2>Device information</h2><p class="muted">Endpoint identity and enrollment metadata.</p></div><span id="device-platform" class="panel-tag">—</span></div>
+            <div class="device-detail-meta">
+                <span>Hostname <strong id="device-hostname">—</strong></span>
+                <span>Agent version <strong id="device-version">—</strong></span>
+                <span>Architecture <strong id="device-architecture">—</strong></span>
+                <span>Enrolled <strong id="device-enrolled">—</strong></span>
+                <span>Agent ID <strong id="device-id">—</strong></span>
+            </div>
+        </section>
+        <div class="device-section-grid">
+            <section class="panel">
+                <div class="panel-heading"><div><h2>Device alerts</h2><p class="muted">Only alerts associated with this endpoint.</p></div><span class="panel-tag">ALERTS</span></div>
+                <div class="table-scroll"><table><thead><tr><th>Alert</th><th>Severity</th><th>Status</th><th>Last seen</th></tr></thead><tbody id="device-alerts"><tr><td colspan="4" class="table-empty">Loading alerts...</td></tr></tbody></table></div>
+            </section>
+            <section class="panel">
+                <div class="panel-heading"><div><h2>Device events</h2><p class="muted">Only events reported by this endpoint.</p></div><span class="panel-tag">EVENTS</span></div>
+                <div class="table-scroll"><table><thead><tr><th>Event</th><th>Level</th><th>Category</th><th>Received</th></tr></thead><tbody id="device-events"><tr><td colspan="4" class="table-empty">Loading events...</td></tr></tbody></table></div>
+            </section>
+        </div>
+        <footer class="page-footer"><span>BASESENTINEL / LOCAL INSTANCE</span><a href="/agents">← Back to clients</a></footer>
+    </main>
+</div>
+<script src="{{ url_for('web.static', filename='js/agent-detail.js') }}" defer></script>
+</body>
+</html>
