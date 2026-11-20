@@ -783,9 +783,10 @@ tbody tr:last-child td { border-bottom: 0; }
 }
 
 .agent-row-link {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(130px, 1fr) 2fr 60px;
     align-items: center;
-    gap: 14px;
+    gap: 15px;
     border-radius: 8px;
     padding: 7px 8px;
     margin: 0 -8px;
