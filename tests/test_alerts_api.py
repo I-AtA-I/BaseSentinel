@@ -626,3 +626,72 @@ def test_resolving_unknown_alert_returns_404(
     )
 
     assert response.status_code == 404
+
+
+def test_viewer_cannot_delete_alert(client, users, seeded_alerts):
+    token = login(client, "viewer")
+    alert_id = seeded_alerts["alert_ids"][0]
+
+    response = client.delete(
+        f"/api/v1/alerts/{alert_id}",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 403
+    assert db.session.get(Alert, alert_id) is not None
+
+
+def test_admin_can_delete_alert_without_deleting_source_event(
+    client,
+    users,
+    seeded_alerts,
+    app,
+):
+    token = login(client, "admin")
+    alert_id = seeded_alerts["alert_ids"][0]
+    source_event_id = db.session.get(Alert, alert_id).source_event_id
+
+    response = client.delete(
+        f"/api/v1/alerts/{alert_id}",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "alert_id": str(alert_id),
+        "deleted": True,
+    }
+    assert db.session.get(Alert, alert_id) is None
+    from basesentinel.models import SecurityEvent
+    assert db.session.get(SecurityEvent, source_event_id) is not None
+
+
+def test_admin_can_flush_all_alerts_but_preserve_events(
+    client,
+    users,
+    seeded_alerts,
+):
+    token = login(client, "admin")
+
+    response = client.delete(
+        "/api/v1/alerts",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["deleted"] == 4
+    assert Alert.query.count() == 0
+    from basesentinel.models import SecurityEvent
+    assert SecurityEvent.query.count() == 4
+
+
+def test_viewer_cannot_flush_all_alerts(client, users, seeded_alerts):
+    token = login(client, "viewer")
+
+    response = client.delete(
+        "/api/v1/alerts",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 403
+    assert Alert.query.count() == 4
