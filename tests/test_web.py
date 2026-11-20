@@ -121,7 +121,8 @@ def test_dashboard_alert_links_open_alert_workspace(client):
 def test_security_events_page_is_available(client):
     response = client.get("/events")
     assert response.status_code == 200
-    assert b"Security events" in response.data
+    assert b">Events<" in response.data
+    assert b"Timeline" in response.data
     assert b'value="security" selected' in response.data
     assert b'value="info"' in response.data
     assert b"/static/js/events.js" in response.data
@@ -149,3 +150,36 @@ def test_security_event_detail_javascript_is_available(client):
 
     assert response.status_code == 200
     assert b"initializeEventDetail" in response.data
+
+def test_shared_navigation_is_consistent_across_workspace_pages(client):
+    pages = ["/", "/events", "/alerts", "/agents", "/settings/enrollment"]
+    expected_links = [
+        b'href="/"',
+        b'href="/events"',
+        b'href="/alerts"',
+        b'href="/agents"',
+        b'href="/settings/enrollment"',
+    ]
+    for path in pages:
+        response = client.get(path)
+        assert response.status_code == 200
+        for link in expected_links:
+            assert link in response.data
+        assert b"Event timeline</a>" not in response.data
+        assert b"Security events</a>" not in response.data
+
+
+def test_device_detail_page_is_available(client):
+    agent_id = "12345678-1234-1234-1234-123456789abc"
+    response = client.get(f"/agents/{agent_id}")
+    assert response.status_code == 200
+    assert b"Device alerts" in response.data
+    assert b"Device events" in response.data
+    assert b"agent-detail.js" in response.data
+
+
+def test_device_detail_javascript_is_available(client):
+    response = client.get("/static/js/agent-detail.js")
+    assert response.status_code == 200
+    assert b"loadDevice" in response.data
+
