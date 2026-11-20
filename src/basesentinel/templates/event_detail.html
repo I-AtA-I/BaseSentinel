@@ -8,23 +8,7 @@
 </head>
 <body>
 <div class="app-shell">
-    <aside class="sidebar">
-        <a class="brand" href="/">
-            <span class="brand-mark">B</span>
-            <span><strong>BASESENTINEL</strong><small>LOCAL SECURITY SYSTEM</small></span>
-        </a>
-        <div class="sidebar-section">
-            <span class="sidebar-label">OPERATIONS / 01</span>
-            <a class="nav-link" href="/">◈ Overview</a>
-            <a class="nav-link active" href="/events">⌁ Security events</a>
-            <a class="nav-link" href="/alerts">△ Alerts</a>
-            <a class="nav-link" href="/agents">▦ Clients</a>
-            <a class="nav-link" href="/settings/enrollment">⚙ Agent enrollment</a>
-        </div>
-        <div class="sidebar-bottom">
-            <div class="connection-indicator"><span class="status-dot"></span><span>Local instance / connected</span></div>
-        </div>
-    </aside>
+    {% include "_sidebar.html" %}
 
     <main class="main-content" id="event-detail-root" data-event-id="{{ event_id }}">
         <header class="topbar">
