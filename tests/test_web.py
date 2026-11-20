@@ -183,3 +183,31 @@ def test_device_detail_javascript_is_available(client):
     assert response.status_code == 200
     assert b"loadDevice" in response.data
 
+
+
+
+def test_dashboard_drilldown_links_are_available(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    javascript = client.get("/static/js/dashboard.js")
+    assert javascript.status_code == 200
+    assert b"/agents/\${encodeURIComponent(agent.agent_id)}" in javascript.data
+    assert b"severity_min=\${item.severity}" in javascript.data
+
+
+def test_events_page_supports_severity_drilldown_context(client):
+    response = client.get("/events")
+    assert response.status_code == 200
+    assert b"severity-filter-context" in response.data
+    javascript = client.get("/static/js/events.js")
+    assert b"severityMin" in javascript.data
+    assert b"/alerts?severity_min=" in javascript.data
+
+
+def test_alerts_page_supports_exact_severity_drilldown(client):
+    response = client.get("/alerts")
+    assert response.status_code == 200
+    assert b'value="10-10"' in response.data
+    javascript = client.get("/static/js/alerts.js")
+    assert b"severity_min" in javascript.data
+    assert b"/events?severity_min=" in javascript.data
