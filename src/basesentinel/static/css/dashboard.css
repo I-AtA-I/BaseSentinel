@@ -724,3 +724,35 @@ tbody tr:last-child td { border-bottom: 0; }
     .event-detail-panel, .event-detail-hero { padding: 15px; }
     .events-table th:nth-child(4), .events-table td:nth-child(4) { display: none; }
 }
+
+
+/* Consistent application navigation and compact view controls */
+.view-toolbar { align-items: center; margin: 0 0 14px; }
+.view-switch { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid var(--line); background: var(--surface); }
+.view-switch-button {
+    min-height: 34px; padding: 0 16px; border: 1px solid transparent;
+    background: transparent; color: var(--muted); font-size: 11px; font-weight: 800;
+}
+.view-switch-button:hover { color: var(--text); }
+.view-switch-button.active { border-color: var(--line-strong); background: var(--surface-2); color: var(--accent); }
+.timeline-period-control { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 11px; }
+.danger-button {
+    min-height: 36px; padding: 0 13px; border: 1px solid var(--danger);
+    background: var(--danger-soft); color: var(--danger); font-size: 10px; font-weight: 850;
+    letter-spacing: .04em; text-transform: uppercase;
+}
+.danger-button:hover { background: var(--danger); color: #fff; }
+.action-danger { border-color: var(--danger); color: var(--danger); }
+.action-danger:hover { background: var(--danger-soft); color: var(--danger); }
+.event-device-name { display: inline-block; color: var(--text); font-weight: 750; }
+.event-device-name:hover { color: var(--accent); text-decoration: underline; }
+.device-detail-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; }
+.device-detail-meta { display: flex; flex-wrap: wrap; gap: 9px 18px; color: var(--muted); font-size: 11px; }
+.device-detail-meta strong { color: var(--text); }
+.device-section-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.device-section-grid .panel { min-width: 0; }
+.device-record-link { color: var(--text); font-weight: 750; }
+.device-record-link:hover { color: var(--accent); }
+@media (max-width: 900px) {
+    .device-section-grid { grid-template-columns: 1fr; }
+}
