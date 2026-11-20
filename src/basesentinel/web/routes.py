@@ -38,6 +38,9 @@ def agents():
     return render_template("agents.html")
 
 
+@web.get("/agents/<agent_id>")
+def agent_detail(agent_id):
+    return render_template("agent_detail.html", agent_id=agent_id)
 @web.get("/agent-invite")
 def agent_invite():
     return render_template("agent_invite.html")
