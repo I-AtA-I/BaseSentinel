@@ -83,7 +83,7 @@ async function loadClients() {
             const device = agent.asset?.hostname || agent.asset?.display_name || "Unknown device";
             const platform = [agent.platform, agent.platform_version].filter(Boolean).join(" · ");
             return `<tr>
-                <td><strong>${escapeHtml(device)}</strong><div class="muted">${escapeHtml(agent.id)}</div></td>
+                <td><a class="device-record-link" href="/agents/${encodeURIComponent(agent.id)}">${escapeHtml(device)}</a><div class="muted">${escapeHtml(agent.id)}</div></td>
                 <td>${escapeHtml(platform || "Unknown")}</td>
                 <td>${escapeHtml(agent.agent_version || "Unknown")}</td>
                 <td><span class="status-pill ${active ? "status-success" : "status-muted"}">${escapeHtml(statusLabel(agent.status))}</span></td>
