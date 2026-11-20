@@ -336,8 +336,9 @@ async function flushAllAlerts() {
         const result = await apiRequest("/alerts", {method: "DELETE"});
         state.offset = 0;
         showError("");
-        document.getElementById("result-summary").textContent = "Deleted " + formatNumber(result.deleted) + " alerts. Source events were preserved.";
         await loadAlerts();
+        document.getElementById("result-summary").textContent =
+            "Deleted " + formatNumber(result.deleted) + " alerts. Source events were preserved.";
     } catch (error) {
         showError(error.message || "Unable to flush alerts.");
     } finally { button.disabled = false; }
