@@ -362,6 +362,31 @@ async function initializeAlerts() {
         return;
     }
 
+    const query = new URLSearchParams(window.location.search);
+    const severityMin = Number(query.get("severity_min"));
+    const severityMax = Number(query.get("severity_max"));
+    if (
+        query.has("severity_min") &&
+        query.has("severity_max") &&
+        Number.isInteger(severityMin) &&
+        Number.isInteger(severityMax) &&
+        severityMin >= 0 &&
+        severityMax <= 10 &&
+        severityMin <= severityMax
+    ) {
+        const severityFilter = document.getElementById("filter-severity");
+        const exactValue = `${severityMin}-${severityMax}`;
+        if ([...severityFilter.options].some((option) => option.value === exactValue)) {
+            severityFilter.value = exactValue;
+        }
+        const context = document.getElementById("severity-filter-context");
+        const label = document.getElementById("severity-filter-label");
+        label.textContent = severityMin === severityMax
+            ? `Level ${severityMin}`
+            : `Levels ${severityMin}–${severityMax}`;
+        context.hidden = false;
+    }
+
     applyTheme(document.documentElement.dataset.theme || "dark");
 
     document.getElementById("theme-toggle").addEventListener("click", () => {

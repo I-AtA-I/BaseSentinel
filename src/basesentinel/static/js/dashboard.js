@@ -367,11 +367,11 @@ function renderSeverity() {
         const width = (item.count / max) * 100;
 
         return `
-            <div class="severity-row">
+            <a class="severity-row severity-row-link" href="/events?severity_min=${item.severity}&severity_max=${item.severity}" aria-label="View events and alerts with severity level ${item.severity}">
                 <span>Level ${item.severity}</span>
                 <div class="severity-track"><div class="severity-fill ${level}" style="width:${width}%"></div></div>
                 <strong>${formatNumber(item.count)}</strong>
-            </div>`;
+            </a>`;
     }).join("");
 }
 
@@ -461,11 +461,11 @@ function renderAgents() {
         const name = agent.display_name || agent.hostname;
         const width = (agent.event_count / max) * 100;
         return `
-            <div class="agent-row">
+            <a class="agent-row agent-row-link" href="/agents/${encodeURIComponent(agent.agent_id)}" title="Open device details for ${escapeHtml(name)}">
                 <span class="agent-name" title="${escapeHtml(agent.hostname)}">${escapeHtml(name)}</span>
                 <div class="agent-track"><div class="agent-fill" style="width:${width}%"></div></div>
                 <span class="agent-count">${formatNumber(agent.event_count)}</span>
-            </div>`;
+            </a>`;
     }).join("");
 }
 
