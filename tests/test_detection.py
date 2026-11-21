@@ -110,6 +110,34 @@ def test_high_severity_event_creates_alert(app, agent):
     assert alert.occurrence_count == 1
 
 
+@pytest.mark.parametrize(
+    ("category", "event_type", "expected_title", "expected_severity"),
+    [
+        ("system", "device.usb_storage_recognized", "USB storage device connected", 8),
+        ("service", "service.installed", "Windows service installed", 8),
+        ("audit", "security_log.cleared", "Windows Security log cleared", 10),
+    ],
+)
+def test_important_windows_events_create_alerts(
+    app, agent, category, event_type, expected_title, expected_severity
+):
+    event = ingest_event(
+        agent,
+        severity=5,
+        event_type=event_type,
+        category=category,
+    )
+
+    alerts = process(event)
+
+    assert len(alerts) == 1
+    assert alerts[0].rule_key == DetectionService.IMPORTANT_EVENT_RULE
+    assert alerts[0].title == expected_title
+    assert alerts[0].severity == expected_severity
+    assert alerts[0].source_event_id == event.id
+    assert Alert.query.count() == 1
+
+
 def test_severity_below_threshold_does_not_create_alert(app, agent):
     event = ingest_event(
         agent,

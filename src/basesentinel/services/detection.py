@@ -15,6 +15,39 @@ class DetectionService:
     REPEATED_FAILED_LOGINS_RULE = "repeated_failed_logins"
 
     HIGH_SEVERITY_THRESHOLD = 9
+    IMPORTANT_EVENT_RULE = "important_security_event"
+    IMPORTANT_EVENT_RULES = {
+        "device.usb_storage_recognized": (
+            "USB storage device connected",
+            "A USB mass-storage device was recognized by Windows.",
+            8,
+        ),
+        "service.installed": (
+            "Windows service installed",
+            "A new Windows service was installed. Review its publisher and executable path.",
+            8,
+        ),
+        "audit.policy_changed": (
+            "Windows audit policy changed",
+            "The Windows audit policy was modified.",
+            8,
+        ),
+        "security_log.cleared": (
+            "Windows Security log cleared",
+            "The Windows Security event log was cleared.",
+            10,
+        ),
+        "account.deleted": (
+            "Windows account deleted",
+            "A Windows user account was deleted.",
+            8,
+        ),
+        "group.member_added": (
+            "Account added to a security group",
+            "A Windows account was added to a security group. Verify the target group and account.",
+            8,
+        ),
+    }
     FAILED_LOGIN_THRESHOLD = 5
     FAILED_LOGIN_WINDOW = timedelta(minutes=5)
 
@@ -53,9 +86,13 @@ class DetectionService:
 
             alerts = []
 
-            if event.severity >= cls.HIGH_SEVERITY_THRESHOLD:
+            important_rule = cls.IMPORTANT_EVENT_RULES.get(event.event_type)
+            if important_rule is not None:
+                alert = cls._detect_important_event(event, important_rule)
+                if alert is not None:
+                    alerts.append(alert)
+            elif event.severity >= cls.HIGH_SEVERITY_THRESHOLD:
                 alert = cls._detect_high_severity_event(event)
-
                 if alert is not None:
                     alerts.append(alert)
 
@@ -75,6 +112,50 @@ class DetectionService:
         except Exception:
             session.rollback()
             raise
+
+    @classmethod
+    def _detect_important_event(
+        cls,
+        event: SecurityEvent,
+        rule: tuple[str, str, int],
+    ) -> Alert:
+        title, description, severity = rule
+        deduplication_key = cls._fingerprint(
+            f"{event.agent_id}:{event.event_uid}"
+        )
+        existing = db.session.scalar(
+            select(Alert)
+            .where(
+                Alert.rule_key == cls.IMPORTANT_EVENT_RULE,
+                Alert.deduplication_key == deduplication_key,
+            )
+            .with_for_update()
+        )
+        if existing is not None:
+            return existing
+
+        now = utcnow_naive()
+        alert = Alert(
+            rule_key=cls.IMPORTANT_EVENT_RULE,
+            title=title,
+            description=(
+                f"{description} Source: {event.source}. "
+                f"Event: {event.event_type}. "
+                f"Details: {event.message[:1000]}"
+            ),
+            severity=severity,
+            status="open",
+            agent_id=event.agent_id,
+            source_event_id=event.id,
+            deduplication_key=deduplication_key,
+            occurrence_count=1,
+            first_seen_at=event.occurred_at,
+            last_seen_at=event.occurred_at,
+            created_at=now,
+            updated_at=now,
+        )
+        db.session.add(alert)
+        return alert
 
     @classmethod
     def _detect_high_severity_event(
