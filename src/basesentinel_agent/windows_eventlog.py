@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import uuid
 import xml.etree.ElementTree as ET
@@ -36,6 +37,103 @@ _ALLOWED_EVENT_FIELDS = {
     "ContainerId", "ManufacturerName",
 }
 _MAX_BATCH = 1000
+_PNP_AUDIT_SUBCATEGORY = "{0CCE9248-69AE-11D9-BED3-505054503030}"
+
+
+def _auditpol_success_enabled(output: str) -> bool:
+    """Recognize an enabled Success audit setting in common Windows locales."""
+    normalized = output.casefold()
+    return any(
+        marker in normalized
+        for marker in ("success", "úspěch", "erfolg", "réussite", "éxito", "sucesso")
+    )
+
+
+def ensure_pnp_audit_activity() -> str:
+    """Enable successful Plug and Play auditing, requesting UAC elevation if needed."""
+    if os.name != "nt":
+        return "unsupported"
+
+    query = [
+        "auditpol.exe",
+        "/get",
+        f"/subcategory:{_PNP_AUDIT_SUBCATEGORY}",
+        "/r",
+    ]
+    try:
+        current = subprocess.run(
+            query,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(f"Could not inspect Plug and Play audit policy: {exc}") from exc
+
+    if current.returncode != 0:
+        detail = current.stderr.strip()[:300]
+        raise RuntimeError(
+            "Could not inspect the Plug and Play audit policy."
+            + (f" Details: {detail}" if detail else "")
+        )
+    if _auditpol_success_enabled(current.stdout):
+        return "already-enabled"
+
+    # Only the narrowly scoped auditpol command is elevated. The agent itself
+    # continues running as the enrolled Windows user.
+    command = (
+        "$p = Start-Process -FilePath "
+        "'$env:SystemRoot\\System32\\auditpol.exe' "
+        "-ArgumentList '/set /subcategory:"
+        + _PNP_AUDIT_SUBCATEGORY
+        + " /success:enable' -Verb RunAs -Wait -PassThru; "
+        "exit $p.ExitCode"
+    )
+    try:
+        elevated = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-Command", command],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(
+            f"Could not request administrator approval for Plug and Play auditing: {exc}"
+        ) from exc
+
+    if elevated.returncode != 0:
+        detail = elevated.stderr.strip()[:300]
+        raise RuntimeError(
+            "Plug and Play auditing was not enabled. Approve the Windows "
+            "administrator prompt, or enable the policy with an administrator account."
+            + (f" Details: {detail}" if detail else "")
+        )
+
+    try:
+        verified = subprocess.run(
+            query,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(f"Could not verify Plug and Play audit policy: {exc}") from exc
+
+    if verified.returncode != 0 or not _auditpol_success_enabled(verified.stdout):
+        raise RuntimeError(
+            "Windows did not confirm that successful Plug and Play auditing is enabled. "
+            "A domain policy may be overriding the local setting."
+        )
+    return "enabled"
 
 # The only interpolated value is a validated integer Windows EventRecordID.
 _POWERSHELL = r"""
