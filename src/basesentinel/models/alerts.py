@@ -67,7 +67,7 @@ class Alert(db.Model):
             ondelete="RESTRICT",
             name="fk_alerts_source_event_id_security_events",
         ),
-        nullable=False,
+        nullable=True,
     )
 
     # SHA-256 fingerprint used for alert deduplication.
