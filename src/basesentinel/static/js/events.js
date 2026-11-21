@@ -279,6 +279,15 @@ async function initializeEvents() {
     }
 
     const query = new URLSearchParams(window.location.search);
+    const requestedCategory = query.get("category");
+    if (requestedCategory) {
+        const categoryFilter = $("filter-category");
+        const matchingOption = Array.from(categoryFilter.options).find(
+            (option) => option.value === requestedCategory,
+        );
+        if (matchingOption) categoryFilter.value = requestedCategory;
+    }
+
     const severityMin = Number(query.get("severity_min"));
     const severityMax = Number(query.get("severity_max"));
     if (
