@@ -781,6 +781,58 @@ def ingest_event():
     return response, 200 if result.duplicate else 201
 
 
+@api.delete("/events")
+@require_user
+@require_role("admin")
+def delete_all_events():
+    """Delete all security events while retaining alerts without source links."""
+    try:
+        detached_alerts = db.session.execute(
+            update(Alert)
+            .where(
+                Alert.source_event_id.in_(
+                    select(SecurityEvent.id)
+                )
+            )
+            .values(source_event_id=None)
+        ).rowcount or 0
+        deleted_events = db.session.execute(
+            delete(SecurityEvent)
+        ).rowcount or 0
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+
+    response = jsonify({
+        "deleted_events": deleted_events,
+        "detached_alerts": detached_alerts,
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response, 200
+
+
+@api.delete("/data")
+@require_user
+@require_role("admin")
+def delete_all_security_data():
+    """Delete all alerts and security events in one transaction."""
+    try:
+        deleted_alerts = db.session.execute(delete(Alert)).rowcount or 0
+        deleted_events = db.session.execute(delete(SecurityEvent)).rowcount or 0
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+
+    response = jsonify({
+        "deleted_alerts": deleted_alerts,
+        "deleted_events": deleted_events,
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response, 200
+
+
 @api.get("/events")
 @require_user
 def list_security_events():
@@ -1000,7 +1052,11 @@ def _alert_payload(alert):
         "severity": alert.severity,
         "status": alert.status,
         "agent_id": str(alert.agent_id),
-        "source_event_id": str(alert.source_event_id),
+        "source_event_id": (
+            str(alert.source_event_id)
+            if alert.source_event_id is not None
+            else None
+        ),
         "occurrence_count": alert.occurrence_count,
         "first_seen_at": _serialize_datetime(alert.first_seen_at),
         "last_seen_at": _serialize_datetime(alert.last_seen_at),
