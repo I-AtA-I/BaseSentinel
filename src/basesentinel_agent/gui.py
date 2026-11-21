@@ -203,8 +203,6 @@ class AgentWindow:
             background=[("selected", "#264354")],
             foreground=[("selected", text)],
         )
-        # Navigation is provided by the sidebar; hide duplicate notebook tabs.
-        style.layout("TNotebook.Tab", [])
 
     def _build_interface(self) -> None:
         shell = tk.Frame(self.root, bg=COLORS["background"])
@@ -361,24 +359,27 @@ class AgentWindow:
         self.nav_buttons[target] = button
 
     def _build_main(self, parent: tk.Frame) -> None:
-        self.workspace = ttk.Notebook(parent)
+        # Use a plain frame as the page host. The sidebar already provides
+        # navigation, so a hidden ttk.Notebook only leaves an unwanted tab frame.
+        self.workspace = tk.Frame(parent, bg=COLORS["background"])
         self.workspace.pack(fill="both", expand=True)
 
         self.pages = {}
-        for key, label in (
-            ("overview", "Overview"),
-            ("collection", "Event collection"),
-            ("queue", "Local event queue"),
-        ):
-            page = tk.Frame(self.workspace, bg=COLORS["background"], padx=20, pady=16)
-            self.workspace.add(page, text=label)
+        for key in ("overview", "collection", "queue"):
+            page = tk.Frame(
+                self.workspace,
+                bg=COLORS["background"],
+                padx=20,
+                pady=16,
+            )
+            page.place(relx=0, rely=0, relwidth=1, relheight=1)
             self.pages[key] = page
 
         self._build_overview_page(self.pages["overview"])
         self._build_collection_page(self.pages["collection"])
         self._build_queue_page(self.pages["queue"])
-        self.workspace.bind("<<NotebookTabChanged>>", self._on_workspace_tab_changed)
-        self._update_navigation("overview")
+        self.current_page = None
+        self._navigate_to("overview")
 
     def _page_heading(
         self,
@@ -592,7 +593,8 @@ class AgentWindow:
         page = self.pages.get(section)
         if page is None:
             return
-        self.workspace.select(page)
+        page.tkraise()
+        self.current_page = section
         self._update_navigation(section)
         if section == "queue":
             self._refresh_queue_table()
@@ -605,15 +607,6 @@ class AgentWindow:
                 fg=COLORS["accent"] if active else COLORS["muted"],
                 font=("Segoe UI Semibold" if active else "Segoe UI", 9),
             )
-
-    def _on_workspace_tab_changed(self, _event=None) -> None:
-        selected_page = self.workspace.select()
-        for key, page in self.pages.items():
-            if selected_page == str(page):
-                self._update_navigation(key)
-                if key == "queue":
-                    self._refresh_queue_table()
-                break
 
     def _refresh_queue_table(self) -> None:
         try:
@@ -1035,7 +1028,7 @@ class AgentWindow:
         self.background_running = state["running"]
         self.pid_value.set(str(state["pid"]) if state["pid"] else "—")
         self.queue_value.set(f"{pending:,} pending")
-        if self.workspace.select() == str(self.pages["queue"]):
+        if self.current_page == "queue":
             self._refresh_queue_table()
         self.status_text.set("Running" if self.background_running else "Stopped")
 
