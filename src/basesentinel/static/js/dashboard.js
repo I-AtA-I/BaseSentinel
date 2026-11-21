@@ -387,12 +387,15 @@ function renderCategories() {
     const max = Math.max(1, ...items.map((item) => item.count));
     container.innerHTML = items.map((item) => {
         const width = (item.count / max) * 100;
+        const category = String(item.category || "");
+        const href = `/events?category=${encodeURIComponent(category)}`;
         return `
-            <div class="category-row">
-                <span>${escapeHtml(item.category)}</span>
+            <a class="category-row category-row-link" href="${href}"
+                aria-label="View ${formatNumber(item.count)} events in category ${escapeHtml(category)}">
+                <span>${escapeHtml(category)}</span>
                 <div class="category-track"><div class="category-fill" style="width:${width}%"></div></div>
                 <strong>${formatNumber(item.count)}</strong>
-            </div>`;
+            </a>`;
     }).join("");
 }
 
