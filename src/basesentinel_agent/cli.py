@@ -18,7 +18,10 @@ from basesentinel_agent.background import (
 from basesentinel_agent.client import AgentApiError, BaseSentinelClient
 from basesentinel_agent.queue import EventQueue
 from basesentinel_agent.storage import AgentConfigStore, default_data_dir
-from basesentinel_agent.windows_eventlog import collect_security_events
+from basesentinel_agent.windows_eventlog import (
+    collect_security_events,
+    ensure_pnp_audit_activity,
+)
 
 
 def _queue() -> EventQueue:
@@ -90,6 +93,13 @@ def _collect_and_send(
 
 
 def collect(args) -> int:
+    try:
+        audit_state = ensure_pnp_audit_activity()
+        if audit_state == "enabled":
+            print("Windows Plug and Play success auditing enabled.")
+    except RuntimeError as exc:
+        print(f"USB detection setup warning: {exc}")
+
     client = _client_from_config()
     queue = _queue()
     discovered, sent, pending, checkpoint = _collect_and_send(
@@ -210,6 +220,13 @@ def _watch_for_stop_request(stream, stop_event: threading.Event) -> None:
 def _run_loop(args, stop_event: threading.Event, mode: str) -> int:
     client = _client_from_config()
     queue = _queue()
+    try:
+        audit_state = ensure_pnp_audit_activity()
+        if audit_state == "enabled":
+            print("Windows Plug and Play success auditing enabled.")
+    except RuntimeError as exc:
+        print(f"USB detection setup warning: {exc}")
+
     print(
         f"BaseSentinel agent {mode}. Collection interval: "
         f"{args.interval:g}s. Delivery limit: {args.batch_size} event(s) per cycle."
