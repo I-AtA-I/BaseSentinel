@@ -18,8 +18,8 @@ class DetectionService:
     IMPORTANT_EVENT_RULE = "important_security_event"
     IMPORTANT_EVENT_RULES = {
         "device.usb_storage_recognized": (
-            "USB storage device connected",
-            "A USB mass-storage device was recognized by Windows.",
+            "USB storage device recognized",
+            "Windows recognized a USB mass-storage device. Multiple Security event 6416 records for the same device are correlated into this alert.",
             8,
         ),
         "service.installed": (
@@ -56,6 +56,30 @@ class DetectionService:
         return hashlib.sha256(
             value.encode("utf-8")
         ).hexdigest()
+
+    @staticmethod
+    def _usb_storage_device_id(event: SecurityEvent) -> str | None:
+        event_data = event.event_data
+        if not isinstance(event_data, dict):
+            return None
+
+        raw_device_id = event_data.get("DeviceId")
+        if not isinstance(raw_device_id, str):
+            return None
+
+        device_id = raw_device_id.strip().casefold()
+        return device_id or None
+
+    @classmethod
+    def _important_event_deduplication_key(cls, event: SecurityEvent) -> str:
+        if event.event_type == "device.usb_storage_recognized":
+            device_id = cls._usb_storage_device_id(event)
+            if device_id is not None:
+                return cls._fingerprint(
+                    f"{event.agent_id}:usb-storage:{device_id}"
+                )
+
+        return cls._fingerprint(f"{event.agent_id}:{event.event_uid}")
 
     @staticmethod
     def _lock_agent(agent_id):
@@ -120,9 +144,7 @@ class DetectionService:
         rule: tuple[str, str, int],
     ) -> Alert:
         title, description, severity = rule
-        deduplication_key = cls._fingerprint(
-            f"{event.agent_id}:{event.event_uid}"
-        )
+        deduplication_key = cls._important_event_deduplication_key(event)
         existing = db.session.scalar(
             select(Alert)
             .where(
@@ -132,6 +154,26 @@ class DetectionService:
             .with_for_update()
         )
         if existing is not None:
+            if event.event_type == "device.usb_storage_recognized":
+                device_id = cls._usb_storage_device_id(event)
+                if device_id is not None:
+                    device_id_expression = func.lower(
+                        func.trim(SecurityEvent.event_data["DeviceId"].as_string())
+                    )
+                    matching_events = db.session.scalars(
+                        select(SecurityEvent)
+                        .where(
+                            SecurityEvent.agent_id == event.agent_id,
+                            SecurityEvent.event_type == "device.usb_storage_recognized",
+                            device_id_expression == device_id,
+                        )
+                        .order_by(SecurityEvent.occurred_at.asc(), SecurityEvent.id.asc())
+                    ).all()
+                    if matching_events:
+                        existing.occurrence_count = len(matching_events)
+                        existing.first_seen_at = matching_events[0].occurred_at
+                        existing.last_seen_at = matching_events[-1].occurred_at
+                        existing.updated_at = utcnow_naive()
             return existing
 
         now = utcnow_naive()

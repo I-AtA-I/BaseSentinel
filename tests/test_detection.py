@@ -59,6 +59,7 @@ def ingest_event(
     username="testuser",
     minute=0,
     category="authentication",
+    event_data=None,
 ):
     payload = {
         "event_uid": str(uuid.uuid4()),
@@ -68,9 +69,9 @@ def ingest_event(
         "severity": severity,
         "source": "Detection Test",
         "message": "Detection test event",
-        "event_data": {
-            "username": username,
-        },
+        "event_data": (
+            event_data if event_data is not None else {"username": username}
+        ),
         "occurred_at": (
             f"2026-11-17T15:{minute:02d}:00Z"
         ),
@@ -113,7 +114,7 @@ def test_high_severity_event_creates_alert(app, agent):
 @pytest.mark.parametrize(
     ("category", "event_type", "expected_title", "expected_severity"),
     [
-        ("system", "device.usb_storage_recognized", "USB storage device connected", 8),
+        ("system", "device.usb_storage_recognized", "USB storage device recognized", 8),
         ("service", "service.installed", "Windows service installed", 8),
         ("audit", "security_log.cleared", "Windows Security log cleared", 10),
     ],
@@ -136,6 +137,74 @@ def test_important_windows_events_create_alerts(
     assert alerts[0].severity == expected_severity
     assert alerts[0].source_event_id == event.id
     assert Alert.query.count() == 1
+
+
+def test_usb_recognition_records_for_same_device_share_one_alert(app, agent):
+    device_id = "USBSTOR\\Disk&Ven_Kingston&Prod_DataTraveler_Duo\\1831BFBD3065C57029600109&0"
+    first_event = ingest_event(
+        agent,
+        event_type="device.usb_storage_recognized",
+        category="system",
+        minute=0,
+        event_data={"DeviceId": device_id},
+    )
+    first_alert = Alert.query.filter_by(
+        rule_key=DetectionService.IMPORTANT_EVENT_RULE
+    ).one()
+
+    second_event = ingest_event(
+        agent,
+        event_type="device.usb_storage_recognized",
+        category="system",
+        minute=1,
+        event_data={"DeviceId": device_id.swapcase()},
+    )
+    second_alerts = process(second_event)
+
+    assert len(second_alerts) == 1
+    assert second_alerts[0].id == first_alert.id
+    assert second_alerts[0].title == "USB storage device recognized"
+    assert second_alerts[0].occurrence_count == 2
+    assert second_alerts[0].source_event_id == first_event.id
+    assert Alert.query.filter_by(
+        rule_key=DetectionService.IMPORTANT_EVENT_RULE
+    ).count() == 1
+
+
+def test_usb_recognition_records_for_different_devices_create_separate_alerts(
+    app, agent
+):
+    device_ids = ("USBSTOR\\Disk\\DEVICE_A", "USBSTOR\\Disk\\DEVICE_B")
+    for minute, device_id in enumerate(device_ids):
+        ingest_event(
+            agent,
+            event_type="device.usb_storage_recognized",
+            category="system",
+            minute=minute,
+            event_data={"DeviceId": device_id},
+        )
+
+    alerts = Alert.query.filter_by(
+        rule_key=DetectionService.IMPORTANT_EVENT_RULE
+    ).all()
+
+    assert len(alerts) == 2
+    assert all(alert.occurrence_count == 1 for alert in alerts)
+
+
+def test_usb_recognition_without_device_id_remains_per_event(app, agent):
+    for minute in range(2):
+        ingest_event(
+            agent,
+            event_type="device.usb_storage_recognized",
+            category="system",
+            minute=minute,
+            event_data={"DeviceDescription": "Unknown USB storage"},
+        )
+
+    assert Alert.query.filter_by(
+        rule_key=DetectionService.IMPORTANT_EVENT_RULE
+    ).count() == 2
 
 
 def test_severity_below_threshold_does_not_create_alert(app, agent):
