@@ -733,13 +733,14 @@ class AgentWindow:
         tab_bar = tk.Frame(panel, bg=COLORS["panel"])
         tab_bar.pack(fill="x", pady=(0, 1))
 
-        content = tk.Frame(panel, bg=COLORS["panel"])
+        content = tk.Frame(panel, bg=COLORS["panel"], height=132)
         content.pack(fill="x", expand=True)
+        content.pack_propagate(False)
 
         link_tab = tk.Frame(content, bg=COLORS["panel"], padx=8, pady=12)
         code_tab = tk.Frame(content, bg=COLORS["panel"], padx=8, pady=12)
-        link_tab.pack(fill="x", expand=True)
-        code_tab.pack(fill="x", expand=True)
+        link_tab.place(relx=0, rely=0, relwidth=1, relheight=1)
+        code_tab.place(relx=0, rely=0, relwidth=1, relheight=1)
 
         self.enrollment_tab = 0
         self.enrollment_tab_buttons = []
