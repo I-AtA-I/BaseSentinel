@@ -288,8 +288,6 @@ class AgentWindow:
             bg=COLORS["panel"],
             padx=12,
             pady=12,
-            highlightbackground=COLORS["border"],
-            highlightthickness=1,
         )
         info.pack(side="bottom", fill="x")
         tk.Label(
@@ -668,8 +666,6 @@ class AgentWindow:
             bg=COLORS["panel"],
             padx=14,
             pady=12,
-            highlightbackground=COLORS["border"],
-            highlightthickness=1,
         )
         card.grid(row=0, column=column, sticky="nsew", padx=(0 if column == 0 else 7, 7))
         top = tk.Frame(card, bg=COLORS["panel"])
@@ -709,8 +705,6 @@ class AgentWindow:
             bg=COLORS["panel"],
             padx=15,
             pady=13,
-            highlightbackground=COLORS["border"],
-            highlightthickness=1,
         )
         panel.pack(fill="x", pady=(0, 12))
         heading = tk.Frame(panel, bg=COLORS["panel"])
@@ -936,8 +930,6 @@ class AgentWindow:
             bg=COLORS["panel"],
             padx=15,
             pady=12,
-            highlightbackground=COLORS["border"],
-            highlightthickness=1,
         )
         panel.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(2, 0))
         panel.grid_rowconfigure(1, weight=1)
