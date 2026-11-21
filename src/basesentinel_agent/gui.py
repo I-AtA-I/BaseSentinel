@@ -187,6 +187,10 @@ class AgentWindow:
             fieldbackground=COLORS["log"],
             foreground=text,
             borderwidth=0,
+            relief="flat",
+            bordercolor=COLORS["log"],
+            lightcolor=COLORS["log"],
+            darkcolor=COLORS["log"],
             rowheight=27,
             font=("Segoe UI", 9),
         )
@@ -726,13 +730,48 @@ class AgentWindow:
             "Use a one-time invitation from your BaseSentinel administrator.",
         )
 
-        notebook = ttk.Notebook(panel)
-        notebook.pack(fill="x", expand=True)
+        tab_bar = tk.Frame(panel, bg=COLORS["panel"])
+        tab_bar.pack(fill="x", pady=(0, 1))
 
-        link_tab = ttk.Frame(notebook, padding=(8, 12, 8, 8))
-        code_tab = ttk.Frame(notebook, padding=(8, 12, 8, 8))
-        notebook.add(link_tab, text="Invitation link")
-        notebook.add(code_tab, text="Invitation code")
+        content = tk.Frame(panel, bg=COLORS["panel"])
+        content.pack(fill="x", expand=True)
+
+        link_tab = tk.Frame(content, bg=COLORS["panel"], padx=8, pady=12)
+        code_tab = tk.Frame(content, bg=COLORS["panel"], padx=8, pady=12)
+        link_tab.pack(fill="x", expand=True)
+        code_tab.pack(fill="x", expand=True)
+
+        self.enrollment_tab = 0
+        self.enrollment_tab_buttons = []
+
+        def select_tab(index: int) -> None:
+            self.enrollment_tab = index
+            (link_tab if index == 0 else code_tab).tkraise()
+            for button_index, button in enumerate(self.enrollment_tab_buttons):
+                active = button_index == index
+                button.configure(
+                    bg=COLORS["panel_alt"] if active else COLORS["panel"],
+                    fg=COLORS["accent"] if active else COLORS["muted"],
+                )
+
+        for index, label in enumerate(("Invitation link", "Invitation code")):
+            button = tk.Button(
+                tab_bar,
+                text=label,
+                command=lambda selected=index: select_tab(selected),
+                bg=COLORS["panel_alt"] if index == 0 else COLORS["panel"],
+                fg=COLORS["accent"] if index == 0 else COLORS["muted"],
+                activebackground=COLORS["panel_alt"],
+                activeforeground=COLORS["text"],
+                relief="flat",
+                borderwidth=0,
+                padx=12,
+                pady=8,
+                font=("Segoe UI Semibold", 9),
+                cursor="hand2",
+            )
+            button.pack(side="left", padx=(0, 5))
+            self.enrollment_tab_buttons.append(button)
 
         ttk.Label(
             link_tab,
@@ -776,7 +815,7 @@ class AgentWindow:
             action_row,
             text="Connect device",
             style="Accent.TButton",
-            command=lambda: self.connect(notebook.index("current")),
+            command=lambda: self.connect(self.enrollment_tab),
         )
         self.connect_button.pack(side="left")
         ttk.Label(
@@ -784,6 +823,8 @@ class AgentWindow:
             text="Credentials protected by Windows DPAPI",
             style="Muted.TLabel",
         ).pack(side="right", padx=(8, 0))
+
+        select_tab(0)
 
     def _build_monitoring_card(self, parent: tk.Frame) -> None:
         panel = self._panel(
