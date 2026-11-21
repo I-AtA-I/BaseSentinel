@@ -48,6 +48,23 @@ def enroll(args) -> int:
     return 0
 
 
+_LEGACY_EVENT_CATEGORIES = {
+    "audit.policy_changed": ("security", "audit"),
+    "security_log.cleared": ("security", "audit"),
+    "device.usb_storage_recognized": ("device", "system"),
+}
+
+
+def _normalize_legacy_event_category(event: dict) -> dict:
+    """Normalize category aliases stored by older agent versions before delivery."""
+    expected = _LEGACY_EVENT_CATEGORIES.get(event.get("event_type"))
+    if expected is None or event.get("category") != expected[0]:
+        return event
+    normalized = dict(event)
+    normalized["category"] = expected[1]
+    return normalized
+
+
 def _deliver_pending(
     client: BaseSentinelClient,
     queue: EventQueue,
@@ -60,7 +77,7 @@ def _deliver_pending(
         if stop_event is not None and stop_event.is_set():
             break
         try:
-            client.send_event(event)
+            client.send_event(_normalize_legacy_event_category(event))
         except AgentApiError as exc:
             if exc.status in (401, 403):
                 raise
