@@ -11,12 +11,29 @@ _EVENT_MAP = {
     4624: ("authentication", "login.success", 0),
     4625: ("authentication", "login.failed", 7),
     4672: ("authentication", "privilege.special_assignment", 5),
+    4697: ("system", "service.installed", 7),
+    4719: ("security", "audit.policy_changed", 8),
     4720: ("account", "account.created", 7),
+    4722: ("account", "account.enabled", 5),
+    4723: ("account", "password.change_attempted", 4),
+    4724: ("account", "password.reset", 6),
+    4725: ("account", "account.disabled", 6),
+    4726: ("account", "account.deleted", 7),
+    4732: ("account", "group.member_added", 7),
+    4733: ("account", "group.member_removed", 6),
+    6416: ("device", "device.usb_storage_recognized", 5),
+    1102: ("security", "security_log.cleared", 9),
 }
 _ALLOWED_EVENT_FIELDS = {
     "TargetUserName", "SubjectUserName", "IpAddress", "WorkstationName",
     "LogonType", "ProcessName", "TargetDomainName", "SubjectDomainName",
     "Status", "SubStatus", "PrivilegeList",
+    "TargetSid", "MemberName", "MemberSid", "TargetUserSid",
+    "ServiceName", "ServiceFileName", "ServiceType", "StartType",
+    "SubjectLogonId", "TargetLogonId", "DeviceId", "DeviceInstanceId",
+    "DeviceDescription", "DeviceName", "ClassId", "ClassName",
+    "VendorIds", "CompatibleIds", "LocationInformation", "LocationPaths",
+    "ContainerId", "ManufacturerName",
 }
 _MAX_BATCH = 1000
 
@@ -40,7 +57,7 @@ try {{
     }}
 
     if ($checkpoint -gt $latestId) {{ $checkpoint = 0 }}
-    $xpath = "*[System[(EventID=4624 or EventID=4625 or EventID=4672 or EventID=4720) and (EventRecordID > $checkpoint)]]"
+    $xpath = "*[System[(EventID=4624 or EventID=4625 or EventID=4672 or EventID=4697 or EventID=4719 or EventID=4720 or EventID=4722 or EventID=4723 or EventID=4724 or EventID=4725 or EventID=4726 or EventID=4732 or EventID=4733 or EventID=6416 or EventID=1102) and (EventRecordID > $checkpoint)]]"
 
     $events = @(Get-WinEvent -LogName 'Security' -FilterXPath $xpath -Oldest -MaxEvents {_max_batch} -ErrorAction SilentlyContinue | ForEach-Object {{
         [pscustomobject]@{{
@@ -74,6 +91,25 @@ def _event_data(xml_text: str) -> dict:
         if name in _ALLOWED_EVENT_FIELDS and len(values) < 20:
             values[name] = (item.text or "")[:512]
     return values
+
+
+def _is_usb_storage_device(event_data: dict) -> bool:
+    """Return True only for Plug and Play records identifying USB storage."""
+    identifiers = " ".join(
+        str(event_data.get(key) or "")
+        for key in (
+            "DeviceId",
+            "DeviceInstanceId",
+            "CompatibleIds",
+            "ClassName",
+            "DeviceDescription",
+        )
+    ).casefold()
+
+    return (
+        "usbstor\\" in identifiers
+        or ("usb\\" in identifiers and "diskdrive" in identifiers)
+    )
 
 
 def collect_security_events(last_record_id: int = 0) -> tuple[list[dict], int]:
@@ -149,6 +185,9 @@ def collect_security_events(last_record_id: int = 0) -> tuple[list[dict], int]:
         except (KeyError, ValueError, ET.ParseError, TypeError):
             continue
         record_ids.append(record_id)
+        if item["Id"] == 6416 and not _is_usb_storage_device(event_data):
+            # Keep the checkpoint moving, but do not report unrelated USB devices.
+            continue
         event_data.update({"record_id": record_id, "computer": computer})
         message = str(
             item.get("Message") or f"Windows Security event {item['Id']}"
