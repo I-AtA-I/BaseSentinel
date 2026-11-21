@@ -1,4 +1,5 @@
 import json
+import subprocess
 import uuid
 
 import pytest
@@ -477,3 +478,50 @@ def test_security_collector_queries_expanded_event_ids(monkeypatch):
 
     for event_id in (4697, 4719, 4722, 4723, 4724, 4725, 4726, 4732, 4733, 6416, 1102):
         assert f"EventID={event_id}" in captured["script"]
+
+def test_auditpol_success_setting_detection():
+    from basesentinel_agent.windows_eventlog import _auditpol_success_enabled
+
+    assert _auditpol_success_enabled("Machine,Policy,Plug and Play Events,Success")
+    assert _auditpol_success_enabled("Plug and Play Events,Úspěch")
+    assert not _auditpol_success_enabled("Plug and Play Events,No Auditing")
+
+
+def test_ensure_pnp_audit_activity_skips_when_already_enabled(monkeypatch):
+    from basesentinel_agent import windows_eventlog
+
+    monkeypatch.setattr(windows_eventlog.os, "name", "nt")
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, "Plug and Play Events,Success", "")
+
+    monkeypatch.setattr(windows_eventlog.subprocess, "run", fake_run)
+
+    assert windows_eventlog.ensure_pnp_audit_activity() == "already-enabled"
+    assert len(calls) == 1
+    assert calls[0][0] == "auditpol.exe"
+
+
+def test_ensure_pnp_audit_activity_requests_elevation_and_verifies(monkeypatch):
+    from basesentinel_agent import windows_eventlog
+
+    monkeypatch.setattr(windows_eventlog.os, "name", "nt")
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        if args[0] == "auditpol.exe":
+            output = "Plug and Play Events,Success" if len(calls) > 1 else "Plug and Play Events,No Auditing"
+            return subprocess.CompletedProcess(args, 0, output, "")
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(windows_eventlog.subprocess, "run", fake_run)
+
+    assert windows_eventlog.ensure_pnp_audit_activity() == "enabled"
+    assert len(calls) == 3
+    assert calls[1][0] == "powershell.exe"
+    assert "-Verb RunAs" in calls[1][-1]
+    assert "/success:enable" in calls[1][-1]
+

@@ -33,6 +33,6 @@ Windows does not necessarily write event 6416 unless the **Audit PNP Activity** 
 3. Open **Audit PNP Activity** and enable **Success**.
 4. Ensure the agent account can read the Windows Security event log.
 
-The agent does not change local audit policy automatically. This avoids silently changing a machine's security configuration.
+The agent checks this policy when collection starts. If Success auditing is disabled, it requests administrator approval through the standard Windows UAC prompt and applies only the Plug and Play Success audit setting. The collector itself continues running as the enrolled user. If approval is declined or a domain policy overrides the setting, USB recognition events may not be available and the agent reports a setup warning.
 
 **Coverage limitation:** event 6416 reports when Windows first recognizes a new external device. It is not a guaranteed record of every later unplug/replug cycle. Repeated connection and removal monitoring requires collection from the separate Kernel-PnP event channels and their own durable checkpoints; that is not included in this change.
