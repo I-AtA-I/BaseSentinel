@@ -86,7 +86,7 @@ def ensure_pnp_audit_activity() -> str:
     # continues running as the enrolled Windows user.
     command = (
         "$p = Start-Process -FilePath "
-        "'$env:SystemRoot\\System32\\auditpol.exe' "
+        '"$env:SystemRoot\\System32\\auditpol.exe" '
         "-ArgumentList '/set /subcategory:"
         + _PNP_AUDIT_SUBCATEGORY
         + " /success:enable' -Verb RunAs -Wait -PassThru; "
