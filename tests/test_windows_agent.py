@@ -423,7 +423,7 @@ def test_security_collector_detects_new_usb_storage_device(monkeypatch):
 
     assert checkpoint == 641
     assert len(events) == 1
-    assert events[0]["category"] == "device"
+    assert events[0]["category"] == "system"
     assert events[0]["event_type"] == "device.usb_storage_recognized"
     assert events[0]["severity"] == 5
     assert events[0]["event_data"]["DeviceDescription"] == "USB Mass Storage Device"
@@ -478,6 +478,18 @@ def test_security_collector_queries_expanded_event_ids(monkeypatch):
 
     for event_id in (4697, 4719, 4722, 4723, 4724, 4725, 4726, 4732, 4733, 6416, 1102):
         assert f"EventID={event_id}" in captured["script"]
+
+def test_windows_event_map_uses_only_server_supported_categories():
+    from basesentinel.services.events import EventIngestionService
+    from basesentinel_agent.windows_eventlog import _EVENT_MAP
+
+    categories = {category for category, _event_type, _severity in _EVENT_MAP.values()}
+    assert categories <= EventIngestionService.ALLOWED_CATEGORIES
+    assert _EVENT_MAP[4697][0] == "service"
+    assert _EVENT_MAP[4719][0] == "audit"
+    assert _EVENT_MAP[6416][0] == "system"
+    assert _EVENT_MAP[1102][0] == "audit"
+
 
 def test_auditpol_success_setting_detection():
     from basesentinel_agent.windows_eventlog import _auditpol_success_enabled

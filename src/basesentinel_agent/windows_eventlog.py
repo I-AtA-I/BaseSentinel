@@ -12,8 +12,8 @@ _EVENT_MAP = {
     4624: ("authentication", "login.success", 0),
     4625: ("authentication", "login.failed", 7),
     4672: ("authentication", "privilege.special_assignment", 5),
-    4697: ("system", "service.installed", 7),
-    4719: ("security", "audit.policy_changed", 8),
+    4697: ("service", "service.installed", 7),
+    4719: ("audit", "audit.policy_changed", 8),
     4720: ("account", "account.created", 7),
     4722: ("account", "account.enabled", 5),
     4723: ("account", "password.change_attempted", 4),
@@ -22,8 +22,8 @@ _EVENT_MAP = {
     4726: ("account", "account.deleted", 7),
     4732: ("account", "group.member_added", 7),
     4733: ("account", "group.member_removed", 6),
-    6416: ("device", "device.usb_storage_recognized", 5),
-    1102: ("security", "security_log.cleared", 9),
+    6416: ("system", "device.usb_storage_recognized", 5),
+    1102: ("audit", "security_log.cleared", 9),
 }
 _ALLOWED_EVENT_FIELDS = {
     "TargetUserName", "SubjectUserName", "IpAddress", "WorkstationName",
