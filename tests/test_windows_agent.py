@@ -389,3 +389,91 @@ def test_successful_logon_is_informational_level_zero(monkeypatch):
     assert len(events) == 1
     assert events[0]["event_type"] == "login.success"
     assert events[0]["severity"] == 0
+
+
+def test_security_collector_detects_new_usb_storage_device(monkeypatch):
+    import subprocess
+    from basesentinel_agent import windows_eventlog
+
+    output = {
+        "LatestRecordId": 641,
+        "Events": [{
+            "Id": 6416,
+            "RecordId": 641,
+            "TimeCreated": "2026-11-21T10:00:00Z",
+            "MachineName": "WORKSTATION",
+            "Message": "A new external device was recognized by the system.",
+            "Xml": (
+                "<Event><EventData>"
+                '<Data Name="DeviceId">USBSTOR\\\\Disk&amp;Ven_Generic&amp;Prod_Flash_Disk</Data>'
+                '<Data Name="DeviceDescription">USB Mass Storage Device</Data>'
+                '<Data Name="ClassName">DiskDrive</Data>'
+                '<Data Name="CompatibleIds">USBSTOR\\\\GenDisk</Data>'
+                "</EventData></Event>"
+            ),
+        }],
+    }
+
+    def fake_run(args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, json.dumps(output), "")
+
+    monkeypatch.setattr(windows_eventlog.subprocess, "run", fake_run)
+    events, checkpoint = windows_eventlog.collect_security_events()
+
+    assert checkpoint == 641
+    assert len(events) == 1
+    assert events[0]["category"] == "device"
+    assert events[0]["event_type"] == "device.usb_storage_recognized"
+    assert events[0]["severity"] == 5
+    assert events[0]["event_data"]["DeviceDescription"] == "USB Mass Storage Device"
+
+
+def test_security_collector_ignores_non_storage_pnp_events_but_advances_checkpoint(monkeypatch):
+    import subprocess
+    from basesentinel_agent import windows_eventlog
+
+    output = {
+        "LatestRecordId": 642,
+        "Events": [{
+            "Id": 6416,
+            "RecordId": 641,
+            "TimeCreated": "2026-11-21T10:00:00Z",
+            "MachineName": "WORKSTATION",
+            "Message": "A new external device was recognized by the system.",
+            "Xml": (
+                "<Event><EventData>"
+                '<Data Name="DeviceId">USB\\\\VID_1234&amp;PID_5678</Data>'
+                '<Data Name="ClassName">Keyboard</Data>'
+                "</EventData></Event>"
+            ),
+        }],
+    }
+
+    def fake_run(args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, json.dumps(output), "")
+
+    monkeypatch.setattr(windows_eventlog.subprocess, "run", fake_run)
+    events, checkpoint = windows_eventlog.collect_security_events()
+
+    assert events == []
+    assert checkpoint == 642
+
+
+def test_security_collector_queries_expanded_event_ids(monkeypatch):
+    import subprocess
+    from basesentinel_agent import windows_eventlog
+
+    captured = {}
+
+    def fake_run(args, **kwargs):
+        captured["script"] = args[-1]
+        return subprocess.CompletedProcess(args, 0, json.dumps({
+            "LatestRecordId": 10,
+            "Events": [],
+        }), "")
+
+    monkeypatch.setattr(windows_eventlog.subprocess, "run", fake_run)
+    windows_eventlog.collect_security_events()
+
+    for event_id in (4697, 4719, 4722, 4723, 4724, 4725, 4726, 4732, 4733, 6416, 1102):
+        assert f"EventID={event_id}" in captured["script"]
