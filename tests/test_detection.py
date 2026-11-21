@@ -140,7 +140,7 @@ def test_important_windows_events_create_alerts(
 
 
 def test_usb_recognition_records_for_same_device_share_one_alert(app, agent):
-    device_id = "USBSTOR\\\\Disk&Ven_Kingston&Prod_DataTraveler_Duo\\\\1831BFBD3065C57029600109&0"
+    device_id = "USBSTOR\\Disk&Ven_Kingston&Prod_DataTraveler_Duo\\1831BFBD3065C57029600109&0"
     first_event = ingest_event(
         agent,
         event_type="device.usb_storage_recognized",
@@ -171,8 +171,11 @@ def test_usb_recognition_records_for_same_device_share_one_alert(app, agent):
     ).count() == 1
 
 
-def test_usb_recognition_records_for_different_devices_create_separate_alerts(app, agent):
-    for minute, device_id in enumerate(("USBSTOR\\\\Disk\\\\DEVICE_A", "USBSTOR\\\\Disk\\\\DEVICE_B")):
+def test_usb_recognition_records_for_different_devices_create_separate_alerts(
+    app, agent
+):
+    device_ids = ("USBSTOR\\Disk\\DEVICE_A", "USBSTOR\\Disk\\DEVICE_B")
+    for minute, device_id in enumerate(device_ids):
         ingest_event(
             agent,
             event_type="device.usb_storage_recognized",
@@ -202,6 +205,7 @@ def test_usb_recognition_without_device_id_remains_per_event(app, agent):
     assert Alert.query.filter_by(
         rule_key=DetectionService.IMPORTANT_EVENT_RULE
     ).count() == 2
+
 
 def test_severity_below_threshold_does_not_create_alert(app, agent):
     event = ingest_event(
