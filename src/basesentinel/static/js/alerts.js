@@ -343,6 +343,40 @@ async function flushAllAlerts() {
         showError(error.message || "Unable to flush alerts.");
     } finally { button.disabled = false; }
 }
+async function flushEvents(button) {
+    if (!window.confirm("FLUSH ALL EVENTS?\n\nThis permanently deletes every security event. Existing alerts will remain, but their source-event links will be removed. This cannot be undone.")) return;
+    button.disabled = true;
+    try {
+        const result = await apiRequest("/events", { method: "DELETE" });
+        state.offset = 0;
+        await loadAlerts();
+        document.getElementById("result-summary").textContent =
+            "Deleted " + formatNumber(result.deleted_events) +
+            " events. Preserved " + formatNumber(result.detached_alerts) + " alerts.";
+    } catch (error) {
+        showError(error.message || "Unable to flush events.");
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function flushAllData(button) {
+    if (!window.confirm("FLUSH ALL SECURITY DATA?\n\nThis permanently deletes every security event and every alert. This cannot be undone.")) return;
+    button.disabled = true;
+    try {
+        const result = await apiRequest("/data", { method: "DELETE" });
+        state.offset = 0;
+        await loadAlerts();
+        document.getElementById("result-summary").textContent =
+            "Deleted " + formatNumber(result.deleted_events) + " events and " +
+            formatNumber(result.deleted_alerts) + " alerts.";
+    } catch (error) {
+        showError(error.message || "Unable to flush security data.");
+    } finally {
+        button.disabled = false;
+    }
+}
+
 async function logout() {
     try {
         await apiRequest("/auth/logout", { method: "POST" });
@@ -403,6 +437,12 @@ async function initializeAlerts() {
         if (user.role === "admin") {
             flushButton.hidden = false;
             flushButton.addEventListener("click", flushAllAlerts);
+            const flushEventsButton = document.getElementById("flush-events-button");
+            const flushAllButton = document.getElementById("flush-all-button");
+            flushEventsButton.hidden = false;
+            flushAllButton.hidden = false;
+            flushEventsButton.addEventListener("click", () => flushEvents(flushEventsButton));
+            flushAllButton.addEventListener("click", () => flushAllData(flushAllButton));
         }
 
         document.getElementById("current-username").textContent = user.username;

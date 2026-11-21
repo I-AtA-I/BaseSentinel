@@ -89,6 +89,39 @@ def test_collection_pipeline_queues_sends_and_acknowledges(monkeypatch, tmp_path
     assert queue.security_checkpoint() == 1234
 
 
+@pytest.mark.parametrize(
+    ("event_type", "legacy_category", "expected_category"),
+    [
+        ("audit.policy_changed", "security", "audit"),
+        ("security_log.cleared", "security", "audit"),
+        ("device.usb_storage_recognized", "device", "system"),
+    ],
+)
+def test_delivery_normalizes_legacy_windows_event_categories(
+    tmp_path, event_type, legacy_category, expected_category
+):
+    from basesentinel_agent import cli
+
+    payload = _event()
+    payload["event_type"] = event_type
+    payload["category"] = legacy_category
+    queue = EventQueue(tmp_path / "events.sqlite3")
+    queue.add(payload)
+    delivered = []
+
+    class FakeClient:
+        def send_event(self, event):
+            delivered.append(event)
+            return {"event_uid": event["event_uid"]}
+
+    sent, pending = cli._deliver_pending(FakeClient(), queue, batch_size=10)
+
+    assert sent == 1
+    assert pending == 0
+    assert delivered[0]["category"] == expected_category
+    assert queue.pending() == []
+
+
 def test_failed_delivery_stays_in_local_queue(monkeypatch, tmp_path, capsys):
     from basesentinel_agent import cli
 

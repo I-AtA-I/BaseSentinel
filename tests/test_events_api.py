@@ -6,8 +6,10 @@ import pytest
 
 from basesentinel import create_app, db
 from basesentinel.core.security import generate_agent_token, hash_agent_token
-from basesentinel.models import Agent, AgentCredential, Asset, SecurityEvent
+from basesentinel.models import Agent, AgentCredential, Alert, Asset, SecurityEvent
 from basesentinel.models.base import utcnow_naive
+from basesentinel.services.detection import DetectionService
+from basesentinel.services.events import EventIngestionService
 from basesentinel.services.users import UserService
 
 
@@ -260,3 +262,103 @@ def test_ingested_event_is_visible_in_user_event_registry(client, agent):
     assert data["pagination"]["total"] == 1
     assert data["items"][0]["event_uid"] == payload["event_uid"]
     assert data["items"][0]["event_type"] == "login.failed"
+
+
+def create_admin_token(client):
+    UserService.create_user(
+        username="events_admin",
+        password="test-password-123",
+        role="admin",
+    )
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "events_admin", "password": "test-password-123"},
+    )
+    assert response.status_code == 200
+    return response.get_json()["token"]
+
+
+def create_alert_backed_event(agent):
+    payload = make_event(
+        category="system",
+        event_type="security.critical",
+        severity=9,
+    )
+    result = EventIngestionService.ingest(agent["id"], payload)
+    alerts = DetectionService.process_event(result.event)
+    db.session.commit()
+    assert len(alerts) == 1
+    return result.event, alerts[0]
+
+
+def test_admin_can_flush_events_and_preserve_detached_alerts(client, agent):
+    token = create_admin_token(client)
+    event, alert = create_alert_backed_event(agent)
+
+    response = client.delete(
+        "/api/v1/events",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "deleted_events": 1,
+        "detached_alerts": 1,
+    }
+    assert SecurityEvent.query.count() == 0
+    stored_alert = db.session.get(Alert, alert.id)
+    assert stored_alert is not None
+    assert stored_alert.source_event_id is None
+
+    listed = client.get(
+        "/api/v1/alerts",
+        headers=auth_headers(token),
+    )
+    assert listed.status_code == 200
+    assert listed.get_json()["items"][0]["source_event_id"] is None
+
+
+def test_admin_can_flush_all_events_and_alerts_atomically(client, agent):
+    token = create_admin_token(client)
+    create_alert_backed_event(agent)
+
+    response = client.delete(
+        "/api/v1/data",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "deleted_alerts": 1,
+        "deleted_events": 1,
+    }
+    assert SecurityEvent.query.count() == 0
+    assert Alert.query.count() == 0
+
+
+def test_viewer_cannot_flush_events_or_all_security_data(client, agent):
+    UserService.create_user(
+        username="events_viewer",
+        password="test-password-123",
+        role="viewer",
+    )
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "events_viewer", "password": "test-password-123"},
+    )
+    token = login_response.get_json()["token"]
+    event, alert = create_alert_backed_event(agent)
+
+    events_response = client.delete(
+        "/api/v1/events",
+        headers=auth_headers(token),
+    )
+    all_response = client.delete(
+        "/api/v1/data",
+        headers=auth_headers(token),
+    )
+
+    assert events_response.status_code == 403
+    assert all_response.status_code == 403
+    assert db.session.get(SecurityEvent, event.id) is not None
+    assert db.session.get(Alert, alert.id) is not None
