@@ -202,7 +202,7 @@ function renderAlerts() {
             return `
                 <tr>
                     <td class="detection-cell">
-                        <span class="alert-title">${escapeHtml(alert.title)}</span>
+                        <a class="alert-title alert-detail-link" href="/alerts/${encodeURIComponent(alert.id)}">${escapeHtml(alert.title)}</a>
                         <span class="alert-rule-key">${escapeHtml(alert.rule_key)}</span>
                         <span class="alert-id">${escapeHtml(alert.id)}</span>
                     </td>
