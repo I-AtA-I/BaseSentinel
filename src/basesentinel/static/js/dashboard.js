@@ -445,7 +445,7 @@ function renderAlerts() {
 
         return `
             <tr>
-                <td><span class="alert-title">${escapeHtml(alert.title)}</span></td>
+                <td><a class="alert-title alert-detail-link" href="/alerts/${encodeURIComponent(alert.id)}">${escapeHtml(alert.title)}</a></td>
                 <td><span class="severity-label ${severityClass(severity)}">${severity} · ${severityName(severity)}</span></td>
                 <td><span class="status-label status-${status}">${status}</span></td>
                 <td>${formatNumber(alert.occurrence_count)}</td>
