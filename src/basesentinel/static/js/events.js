@@ -278,36 +278,6 @@ async function flushEvents(button) {
     }
 }
 
-async function flushAlerts(button) {
-    if (!window.confirm("FLUSH ALL ALERTS?\n\nThis permanently deletes every alert. Security events will remain. This cannot be undone.")) return;
-    button.disabled = true;
-    try {
-        const result = await apiRequest("/alerts", { method: "DELETE" });
-        $("result-summary").textContent = "Deleted " + formatNumber(result.deleted) + " alerts.";
-    } catch (error) {
-        showError(error.message || "Unable to flush alerts.");
-    } finally {
-        button.disabled = false;
-    }
-}
-
-async function flushAll(button) {
-    if (!window.confirm("FLUSH ALL SECURITY DATA?\n\nThis permanently deletes every security event and every alert. This cannot be undone.")) return;
-    button.disabled = true;
-    try {
-        const result = await apiRequest("/data", { method: "DELETE" });
-        state.offset = 0;
-        await loadEvents();
-        $("result-summary").textContent =
-            "Deleted " + formatNumber(result.deleted_events) + " events and " +
-            formatNumber(result.deleted_alerts) + " alerts.";
-    } catch (error) {
-        showError(error.message || "Unable to flush security data.");
-    } finally {
-        button.disabled = false;
-    }
-}
-
 async function logout() {
     try {
         await apiRequest("/auth/logout", { method: "POST" });
@@ -427,14 +397,8 @@ async function initializeEvents() {
         $("current-role").textContent = user.role;
         if (user.role === "admin") {
             const flushEventsButton = $("flush-events-button");
-            const flushAlertsButton = $("flush-alerts-button");
-            const flushAllButton = $("flush-all-button");
             flushEventsButton.hidden = false;
-            flushAlertsButton.hidden = false;
-            flushAllButton.hidden = false;
             flushEventsButton.addEventListener("click", () => flushEvents(flushEventsButton));
-            flushAlertsButton.addEventListener("click", () => flushAlerts(flushAlertsButton));
-            flushAllButton.addEventListener("click", () => flushAll(flushAllButton));
         }
     } catch (error) {
         showError(error.message || "Unable to initialize the event registry.");
