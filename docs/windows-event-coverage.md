@@ -5,20 +5,20 @@ The Windows agent collects an allowlist of events from the local Security event 
 ## Current coverage
 
 | Event ID | Event | BaseSentinel event type | Alert behavior |
-| --- | --- | --- |
-| 4624 | Successful logon | `login.success` |
-| 4625 | Failed logon | `login.failed` |
-| 4672 | Special privileges assigned to a logon | `privilege.special_assignment` |
+| --- | --- | ---  — |
+| 4624 | Successful logon | `login.success`  — |
+| 4625 | Failed logon | `login.failed`  — |
+| 4672 | Special privileges assigned to a logon | `privilege.special_assignment`  — |
 | 4697 | Service installed | `service.installed` | High-priority alert |
 | 4719 | System audit policy changed | `audit.policy_changed` | High-priority alert |
-| 4720 | User account created | `account.created` |
-| 4722 | User account enabled | `account.enabled` |
-| 4723 | Password change attempted | `password.change_attempted` |
-| 4724 | Password reset attempted | `password.reset` |
-| 4725 | User account disabled | `account.disabled` |
+| 4720 | User account created | `account.created`  — |
+| 4722 | User account enabled | `account.enabled`  — |
+| 4723 | Password change attempted | `password.change_attempted`  — |
+| 4724 | Password reset attempted | `password.reset`  — |
+| 4725 | User account disabled | `account.disabled`  — |
 | 4726 | User account deleted | `account.deleted` | High-priority alert |
 | 4732 | Member added to a security-enabled local group | `group.member_added` | High-priority alert |
-| 4733 | Member removed from a security-enabled local group | `group.member_removed` |
+| 4733 | Member removed from a security-enabled local group | `group.member_removed`  — |
 | 6416 | New external device recognized (USB storage only) | `device.usb_storage_recognized` | High-priority alert |
 | 1102 | Security audit log cleared | `security_log.cleared` | Critical alert |
 
