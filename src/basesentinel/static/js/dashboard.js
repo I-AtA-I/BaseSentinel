@@ -220,9 +220,33 @@ async function initializeDashboard() {
         document.getElementById("current-role").textContent = user.role;
         document.getElementById("user-initial").textContent = user.username.charAt(0).toUpperCase();
 
+        if (user.role === "admin") {
+            const flushEventsButton = document.getElementById("flush-events-button");
+            flushEventsButton.hidden = false;
+            flushEventsButton.addEventListener("click", () => flushAllEvents(flushEventsButton));
+        }
+
         await loadDashboard();
     } catch (exception) {
         showDashboardError(exception.message || "Unable to initialize dashboard.");
+    }
+}
+
+async function flushAllEvents(button) {
+    const confirmed = window.confirm("FLUSH ALL EVENTS?\\n\\nThis permanently deletes every security event. Existing alerts will be preserved, but their source-event links will be removed. This cannot be undone.");
+    if (!confirmed) return;
+
+    button.disabled = true;
+    clearDashboardError();
+    try {
+        const result = await apiRequest("/events", { method: "DELETE" });
+        await loadDashboard();
+        document.getElementById("last-updated").textContent =
+            `Deleted ${formatNumber(result.deleted_events)} events. Preserved ${formatNumber(result.detached_alerts)} alerts.`;
+    } catch (exception) {
+        showDashboardError(exception.message || "Unable to flush events.");
+    } finally {
+        button.disabled = false;
     }
 }
 
