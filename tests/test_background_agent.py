@@ -318,3 +318,108 @@ def test_event_workspace_sidebar_items_are_interactive():
     assert "ttk.Treeview(" in source
     assert "command=self.drain_backlog" in source
     assert source.count("self._build_activity_card(body)") == 1
+
+
+
+def test_start_worker_accepts_windows_venv_redirector_child(
+    monkeypatch,
+    tmp_path,
+):
+    from types import SimpleNamespace
+
+    import os as real_os
+
+    held = []
+
+    def fake_windows_lock(handle, *, shared):
+        if held:
+            handle.close()
+            return None
+        held.append(handle)
+        return handle
+
+    class FakeProcess:
+        pid = 27412
+
+        @staticmethod
+        def poll():
+            return None
+
+    def fake_popen(_command, **_kwargs):
+        lock = background.try_acquire_worker_lock(tmp_path)
+        assert lock is not None
+        (tmp_path / "agent.pid").write_text("28872", encoding="ascii")
+        return FakeProcess()
+
+    monkeypatch.setattr(
+        background,
+        "os",
+        SimpleNamespace(name="nt", SEEK_END=real_os.SEEK_END),
+    )
+    monkeypatch.setattr(background, "_try_acquire_windows_file_lock", fake_windows_lock)
+    monkeypatch.setattr(
+        background,
+        "_is_windows_process_descendant",
+        lambda ancestor_pid, process_pid: (
+            ancestor_pid == 27412 and process_pid == 28872
+        ),
+    )
+    monkeypatch.setattr(background.subprocess, "Popen", fake_popen)
+
+    try:
+        pid = background.start_background_worker(data_dir=tmp_path)
+        assert pid == 28872
+    finally:
+        if held:
+            held.pop().close()
+
+
+def test_start_worker_rejects_unrelated_windows_worker_pid(
+    monkeypatch,
+    tmp_path,
+):
+    from types import SimpleNamespace
+
+    import os as real_os
+
+    held = []
+
+    def fake_windows_lock(handle, *, shared):
+        if held:
+            handle.close()
+            return None
+        held.append(handle)
+        return handle
+
+    class FakeProcess:
+        pid = 27412
+
+        @staticmethod
+        def poll():
+            return None
+
+    def fake_popen(_command, **_kwargs):
+        lock = background.try_acquire_worker_lock(tmp_path)
+        assert lock is not None
+        (tmp_path / "agent.pid").write_text("99999", encoding="ascii")
+        return FakeProcess()
+
+    monkeypatch.setattr(
+        background,
+        "os",
+        SimpleNamespace(name="nt", SEEK_END=real_os.SEEK_END),
+    )
+    monkeypatch.setattr(background, "_try_acquire_windows_file_lock", fake_windows_lock)
+    monkeypatch.setattr(
+        background,
+        "_is_windows_process_descendant",
+        lambda _ancestor_pid, _process_pid: False,
+    )
+    monkeypatch.setattr(background.subprocess, "Popen", fake_popen)
+
+    try:
+        with pytest.raises(RuntimeError, match="started at the same time"):
+            background.start_background_worker(data_dir=tmp_path)
+    finally:
+        if held:
+            held.pop().close()
