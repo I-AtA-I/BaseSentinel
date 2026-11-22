@@ -269,7 +269,7 @@ def test_defender_malware_records_for_same_threat_and_path_share_one_incident(
         severity=10,
         event_type="malware.detected",
         category="application",
-        minute=17,
+        minute=29,
         event_data={
             **identity,
             "Path": "file:\\_C:\\Users\\MSI\\Downloads\\sample.exe",
@@ -285,7 +285,7 @@ def test_defender_malware_records_for_same_threat_and_path_share_one_incident(
         severity=10,
         event_type="malware.detected",
         category="application",
-        minute=18,
+        minute=30,
         event_data={
             **identity,
             "Path": "C:\\Users\\MSI\\Downloads\\SAMPLE.exe",
@@ -324,6 +324,53 @@ def test_defender_malware_different_threats_create_separate_incidents(app, agent
         rule_key=DetectionService.MALWARE_INCIDENT_RULE
     ).all()
     assert len(incidents) == 2
+
+
+def test_defender_events_across_half_hour_boundary_share_one_incident(app, agent):
+    identity = {
+        "ID": "2147925201",
+        "Threat Name": "Trojan:Win32/Pomal!rfn",
+        "Path": "C:\\Users\\MSI\\Downloads\\sample.exe",
+    }
+    first = ingest_event(
+        agent, severity=10, event_type="malware.detected",
+        category="application", minute=29, event_data=identity,
+    )
+    first_alert = Alert.query.filter_by(
+        rule_key=DetectionService.MALWARE_INCIDENT_RULE
+    ).one()
+
+    second = ingest_event(
+        agent, severity=10, event_type="malware.remediation_failed",
+        category="application", minute=30, event_data=identity,
+    )
+
+    assert second.id != first.id
+    assert Alert.query.filter_by(
+        rule_key=DetectionService.MALWARE_INCIDENT_RULE
+    ).count() == 1
+    db.session.refresh(first_alert)
+    assert first_alert.occurrence_count == 2
+    assert first_alert.last_seen_at == second.occurred_at
+
+
+def test_defender_events_more_than_thirty_minutes_apart_create_separate_incidents(
+    app, agent
+):
+    identity = {
+        "ID": "2147925201",
+        "Threat Name": "Trojan:Win32/Pomal!rfn",
+        "Path": "C:\\Users\\MSI\\Downloads\\sample.exe",
+    }
+    for minute in (17, 48):
+        ingest_event(
+            agent, severity=10, event_type="malware.detected",
+            category="application", minute=minute, event_data=identity,
+        )
+
+    assert Alert.query.filter_by(
+        rule_key=DetectionService.MALWARE_INCIDENT_RULE
+    ).count() == 2
 
 
 def test_defender_remediation_completed_does_not_create_alert(app, agent):
