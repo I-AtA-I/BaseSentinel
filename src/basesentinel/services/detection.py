@@ -16,6 +16,9 @@ class DetectionService:
 
     HIGH_SEVERITY_THRESHOLD = 8
     IMPORTANT_EVENT_RULE = "important_security_event"
+    MALWARE_INCIDENT_RULE = "malware_incident"
+    MALWARE_EVENT_TYPES = {"malware.detected", "malware.remediation_failed"}
+    MALWARE_CORRELATION_WINDOW = timedelta(minutes=30)
     IMPORTANT_EVENT_RULES = {
         "device.usb_storage_recognized": (
             "USB storage device recognized",
@@ -66,16 +69,6 @@ class DetectionService:
             "Account removed from a security group",
             "A Windows account was removed from a security group. Verify the change.",
             8,
-        ),
-        "malware.detected": (
-            "Malware detected by Microsoft Defender",
-            "Microsoft Defender reported a malware detection. Review the threat name, affected path, and remediation status.",
-            10,
-        ),
-        "malware.remediation_failed": (
-            "Malware remediation failed",
-            "Microsoft Defender could not complete a remediation action. Investigate the affected endpoint.",
-            10,
         ),
         "attack_surface_reduction.blocked": (
             "Attack surface reduction rule blocked activity",
@@ -145,15 +138,20 @@ class DetectionService:
 
             alerts = []
 
-            important_rule = cls.IMPORTANT_EVENT_RULES.get(event.event_type)
-            if important_rule is not None:
-                alert = cls._detect_important_event(event, important_rule)
+            if event.event_type in cls.MALWARE_EVENT_TYPES:
+                alert = cls._detect_malware_incident(event)
                 if alert is not None:
                     alerts.append(alert)
-            elif event.severity >= cls.HIGH_SEVERITY_THRESHOLD:
-                alert = cls._detect_high_severity_event(event)
-                if alert is not None:
-                    alerts.append(alert)
+            else:
+                important_rule = cls.IMPORTANT_EVENT_RULES.get(event.event_type)
+                if important_rule is not None:
+                    alert = cls._detect_important_event(event, important_rule)
+                    if alert is not None:
+                        alerts.append(alert)
+                elif event.severity >= cls.HIGH_SEVERITY_THRESHOLD:
+                    alert = cls._detect_high_severity_event(event)
+                    if alert is not None:
+                        alerts.append(alert)
 
             if (
                 event.category == "authentication"
@@ -173,6 +171,124 @@ class DetectionService:
         except Exception:
             session.rollback()
             raise
+
+    @classmethod
+    def _malware_identity(cls, event: SecurityEvent) -> tuple[str, str]:
+        """Build a stable incident identity independent of the triggering process."""
+        data = event.event_data if isinstance(event.event_data, dict) else {}
+        threat_id = data.get("Threat ID") or data.get("ID")
+        threat_name = data.get("Threat Name")
+        raw_path = data.get("Path")
+
+        threat = str(threat_id or threat_name or "").strip().casefold()
+        path = str(raw_path or "").strip().casefold()
+        path = path.replace("file:\\_", "", 1).replace("file:_", "", 1)
+        path = path.replace("/", "\\").strip()
+
+        if not threat or not path:
+            # Incomplete Defender metadata must never collapse unrelated detections.
+            return f"incomplete:{event.event_uid}", f"incomplete:{event.event_uid}"
+        return threat, path
+
+    @classmethod
+    def _malware_window(cls, occurred_at: datetime) -> tuple[datetime, datetime, int]:
+        timestamp = occurred_at.replace(tzinfo=timezone.utc) if occurred_at.tzinfo is None else occurred_at.astimezone(timezone.utc)
+        window_seconds = int(cls.MALWARE_CORRELATION_WINDOW.total_seconds())
+        bucket_start = (int(timestamp.timestamp()) // window_seconds) * window_seconds
+        start = datetime.fromtimestamp(bucket_start, timezone.utc).replace(tzinfo=None)
+        return start, start + cls.MALWARE_CORRELATION_WINDOW, bucket_start
+
+    @classmethod
+    def _detect_malware_incident(cls, event: SecurityEvent) -> Alert:
+        threat, path = cls._malware_identity(event)
+        _, _, bucket_start = cls._malware_window(event.occurred_at)
+        event_time = event.occurred_at
+        identity_key = cls._fingerprint(
+            f"{event.agent_id}:microsoft-defender:{threat}:{path}"
+        )[:48]
+        current_deduplication_key = f"{identity_key}{bucket_start:016x}"
+        correlation_start = event_time - cls.MALWARE_CORRELATION_WINDOW
+        correlation_end = event_time + cls.MALWARE_CORRELATION_WINDOW
+
+        existing = db.session.scalar(
+            select(Alert)
+            .where(
+                Alert.rule_key == cls.MALWARE_INCIDENT_RULE,
+                Alert.deduplication_key.like(f"{identity_key}%"),
+                Alert.last_seen_at >= correlation_start,
+                Alert.last_seen_at <= correlation_end,
+            )
+            .order_by(Alert.last_seen_at.desc())
+            .with_for_update()
+        )
+        deduplication_key = (
+            existing.deduplication_key
+            if existing is not None
+            else current_deduplication_key
+        )
+
+        matching_start = (
+            min(existing.first_seen_at, correlation_start)
+            if existing is not None
+            else correlation_start
+        )
+        matching_events = db.session.scalars(
+            select(SecurityEvent)
+            .where(
+                SecurityEvent.agent_id == event.agent_id,
+                SecurityEvent.event_type.in_(cls.MALWARE_EVENT_TYPES),
+                SecurityEvent.occurred_at >= matching_start,
+                SecurityEvent.occurred_at <= correlation_end,
+            )
+            .order_by(SecurityEvent.occurred_at.asc(), SecurityEvent.id.asc())
+        ).all()
+        matching_events = [
+            candidate for candidate in matching_events
+            if cls._malware_identity(candidate) == (threat, path)
+        ]
+        if not matching_events:
+            matching_events = [event]
+
+        first_seen = matching_events[0].occurred_at
+        last_seen = matching_events[-1].occurred_at
+        now = utcnow_naive()
+
+        if existing is not None:
+            existing.occurrence_count = len(matching_events)
+            existing.first_seen_at = first_seen
+            existing.last_seen_at = last_seen
+            existing.updated_at = now
+            if existing.status != "open":
+                existing.status = "open"
+                existing.acknowledged_by_user_id = None
+                existing.acknowledged_at = None
+                existing.resolved_at = None
+            return existing
+
+        data = event.event_data if isinstance(event.event_data, dict) else {}
+        threat_label = str(data.get("Threat Name") or threat).strip()[:256]
+        path_label = str(data.get("Path") or "Unknown file path").strip()[:512]
+        alert = Alert(
+            rule_key=cls.MALWARE_INCIDENT_RULE,
+            title="Malware incident detected by Microsoft Defender",
+            description=(
+                f"Microsoft Defender detected {threat_label} at {path_label}. "
+                "Correlates detections and failed remediation attempts for the "
+                "same threat and file on this endpoint within a rolling 30-minute window."
+            )[:4000],
+            severity=10,
+            status="open",
+            agent_id=event.agent_id,
+            source_event_id=matching_events[0].id,
+            deduplication_key=deduplication_key,
+            occurrence_count=len(matching_events),
+            first_seen_at=first_seen,
+            last_seen_at=last_seen,
+            created_at=now,
+            updated_at=now,
+        )
+        db.session.add(alert)
+        return alert
 
     @classmethod
     def _detect_important_event(

@@ -60,6 +60,7 @@ def ingest_event(
     minute=0,
     category="authentication",
     event_data=None,
+    occurred_at=None,
 ):
     payload = {
         "event_uid": str(uuid.uuid4()),
@@ -72,9 +73,7 @@ def ingest_event(
         "event_data": (
             event_data if event_data is not None else {"username": username}
         ),
-        "occurred_at": (
-            f"2026-11-17T15:{minute:02d}:00Z"
-        ),
+        "occurred_at": occurred_at or f"2026-11-17T15:{minute:02d}:00Z",
     }
 
     return EventIngestionService.ingest(
@@ -258,6 +257,169 @@ def test_endpoint_protection_events_create_alerts(app, agent, event_type, expect
     assert len(alerts) == 1
     assert alerts[0].severity == expected_severity
     assert alerts[0].source_event_id == event.id
+
+
+def test_defender_malware_records_for_same_threat_and_path_share_one_incident(
+    app, agent
+):
+    identity = {"ID": "2147925201", "Threat Name": "Trojan:Win32/Pomal!rfn"}
+    first = ingest_event(
+        agent,
+        severity=10,
+        event_type="malware.detected",
+        category="application",
+        minute=29,
+        event_data={
+            **identity,
+            "Path": "file:\\_C:\\Users\\MSI\\Downloads\\sample.exe",
+            "Process Name": "C:\\Windows\\System32\\RuntimeBroker.exe",
+        },
+    )
+    first_alert = Alert.query.filter_by(
+        rule_key=DetectionService.MALWARE_INCIDENT_RULE
+    ).one()
+
+    second = ingest_event(
+        agent,
+        severity=10,
+        event_type="malware.detected",
+        category="application",
+        minute=30,
+        event_data={
+            **identity,
+            "Path": "C:\\Users\\MSI\\Downloads\\SAMPLE.exe",
+            "Process Name": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+        },
+    )
+
+    alerts = DetectionService.process_event(second)
+    db.session.commit()
+
+    assert len(alerts) == 1
+    assert alerts[0].id == first_alert.id
+    assert alerts[0].rule_key == "malware_incident"
+    assert alerts[0].occurrence_count == 2
+    assert alerts[0].source_event_id == first.id
+    assert alerts[0].first_seen_at == first.occurred_at
+    assert alerts[0].last_seen_at == second.occurred_at
+    assert Alert.query.filter_by(
+        rule_key=DetectionService.MALWARE_INCIDENT_RULE
+    ).count() == 1
+
+
+def test_defender_incident_stays_correlated_across_continuous_activity(app, agent):
+    identity = {
+        "ID": "2147925201",
+        "Threat Name": "Trojan:Win32/Pomal!rfn",
+        "Path": "C:\\Users\\MSI\\Downloads\\sample.exe",
+    }
+    timestamps = (
+        "2026-11-17T15:05:00Z",
+        "2026-11-17T15:25:00Z",
+        "2026-11-17T15:45:00Z",
+        "2026-11-17T16:05:00Z",
+        "2026-11-17T16:25:00Z",
+        "2026-11-17T16:45:00Z",
+    )
+    for timestamp in timestamps:
+        ingest_event(
+            agent,
+            severity=10,
+            event_type="malware.detected",
+            category="application",
+            event_data=identity,
+            occurred_at=timestamp,
+        )
+
+    incident = Alert.query.filter_by(
+        rule_key=DetectionService.MALWARE_INCIDENT_RULE
+    ).one()
+    assert incident.occurrence_count == len(timestamps)
+    assert incident.first_seen_at.isoformat() == "2026-11-17T15:05:00"
+    assert incident.last_seen_at.isoformat() == "2026-11-17T16:45:00"
+
+
+def test_defender_malware_different_threats_create_separate_incidents(app, agent):
+    common = {"Path": "C:\\Users\\MSI\\Downloads\\sample.exe"}
+    for minute, threat_id in ((17, "1001"), (18, "2002")):
+        ingest_event(
+            agent,
+            severity=10,
+            event_type="malware.detected",
+            category="application",
+            minute=minute,
+            event_data={**common, "ID": threat_id, "Threat Name": f"Threat-{threat_id}"},
+        )
+
+    incidents = Alert.query.filter_by(
+        rule_key=DetectionService.MALWARE_INCIDENT_RULE
+    ).all()
+    assert len(incidents) == 2
+
+
+def test_defender_events_across_half_hour_boundary_share_one_incident(app, agent):
+    identity = {
+        "ID": "2147925201",
+        "Threat Name": "Trojan:Win32/Pomal!rfn",
+        "Path": "C:\\Users\\MSI\\Downloads\\sample.exe",
+    }
+    first = ingest_event(
+        agent, severity=10, event_type="malware.detected",
+        category="application", minute=29, event_data=identity,
+    )
+    first_alert = Alert.query.filter_by(
+        rule_key=DetectionService.MALWARE_INCIDENT_RULE
+    ).one()
+
+    second = ingest_event(
+        agent, severity=10, event_type="malware.remediation_failed",
+        category="application", minute=30, event_data=identity,
+    )
+
+    assert second.id != first.id
+    assert Alert.query.filter_by(
+        rule_key=DetectionService.MALWARE_INCIDENT_RULE
+    ).count() == 1
+    db.session.refresh(first_alert)
+    assert first_alert.occurrence_count == 2
+    assert first_alert.last_seen_at == second.occurred_at
+
+
+def test_defender_events_more_than_thirty_minutes_apart_create_separate_incidents(
+    app, agent
+):
+    identity = {
+        "ID": "2147925201",
+        "Threat Name": "Trojan:Win32/Pomal!rfn",
+        "Path": "C:\\Users\\MSI\\Downloads\\sample.exe",
+    }
+    for minute in (17, 48):
+        ingest_event(
+            agent, severity=10, event_type="malware.detected",
+            category="application", minute=minute, event_data=identity,
+        )
+
+    assert Alert.query.filter_by(
+        rule_key=DetectionService.MALWARE_INCIDENT_RULE
+    ).count() == 2
+
+
+def test_defender_remediation_completed_does_not_create_alert(app, agent):
+    event = ingest_event(
+        agent,
+        severity=3,
+        event_type="malware.remediation_completed",
+        category="application",
+        event_data={
+            "ID": "2147925201",
+            "Threat Name": "Trojan:Win32/Pomal!rfn",
+            "Path": "C:\\Users\\MSI\\Downloads\\sample.exe",
+            "Action": "Quarantine",
+        },
+    )
+
+    assert Alert.query.count() == 0
+    assert DetectionService.process_event(event) == []
 
 
 def test_high_severity_alert_is_idempotent(app, agent):
