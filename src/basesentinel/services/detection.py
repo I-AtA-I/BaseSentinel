@@ -14,7 +14,7 @@ class DetectionService:
     HIGH_SEVERITY_RULE = "high_severity_event"
     REPEATED_FAILED_LOGINS_RULE = "repeated_failed_logins"
 
-    HIGH_SEVERITY_THRESHOLD = 9
+    HIGH_SEVERITY_THRESHOLD = 8
     IMPORTANT_EVENT_RULE = "important_security_event"
     IMPORTANT_EVENT_RULES = {
         "device.usb_storage_recognized": (
@@ -45,6 +45,41 @@ class DetectionService:
         "group.member_added": (
             "Account added to a security group",
             "A Windows account was added to a security group. Verify the target group and account.",
+            8,
+        ),
+        "account.created": (
+            "Windows account created",
+            "A new Windows account was created. Verify the requester and intended owner.",
+            8,
+        ),
+        "account.enabled": (
+            "Windows account enabled",
+            "A Windows account was enabled. Verify that the change was authorized.",
+            8,
+        ),
+        "password.reset": (
+            "Windows account password reset",
+            "A Windows account password reset was attempted. Verify the requester and target account.",
+            8,
+        ),
+        "group.member_removed": (
+            "Account removed from a security group",
+            "A Windows account was removed from a security group. Verify the change.",
+            8,
+        ),
+        "malware.detected": (
+            "Malware detected by Microsoft Defender",
+            "Microsoft Defender reported a malware detection. Review the threat name, affected path, and remediation status.",
+            10,
+        ),
+        "malware.remediation_failed": (
+            "Malware remediation failed",
+            "Microsoft Defender could not complete a remediation action. Investigate the affected endpoint.",
+            10,
+        ),
+        "attack_surface_reduction.blocked": (
+            "Attack surface reduction rule blocked activity",
+            "Microsoft Defender Attack Surface Reduction blocked an action. Review the process and rule details.",
             8,
         ),
     }
