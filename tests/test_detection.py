@@ -210,7 +210,7 @@ def test_usb_recognition_without_device_id_remains_per_event(app, agent):
 def test_severity_below_threshold_does_not_create_alert(app, agent):
     event = ingest_event(
         agent,
-        severity=8,
+        severity=7,
         event_type="system.warning",
         category="system",
     )
@@ -219,6 +219,45 @@ def test_severity_below_threshold_does_not_create_alert(app, agent):
 
     assert alerts == []
     assert Alert.query.count() == 0
+
+
+def test_severity_eight_event_creates_alert(app, agent):
+    event = ingest_event(
+        agent,
+        severity=8,
+        event_type="system.warning",
+        category="system",
+    )
+
+    alerts = process(event)
+
+    assert len(alerts) == 1
+    assert alerts[0].rule_key == "high_severity_event"
+    assert alerts[0].severity == 8
+
+
+@pytest.mark.parametrize(
+    ("event_type", "expected_severity"),
+    [
+        ("malware.detected", 10),
+        ("malware.remediation_failed", 10),
+        ("attack_surface_reduction.blocked", 8),
+    ],
+)
+def test_endpoint_protection_events_create_alerts(app, agent, event_type, expected_severity):
+    event = ingest_event(
+        agent,
+        severity=expected_severity,
+        event_type=event_type,
+        category="application",
+        event_data={"Threat Name": "Test threat", "Path": "C:\\\\sample.exe"},
+    )
+
+    alerts = process(event)
+
+    assert len(alerts) == 1
+    assert alerts[0].severity == expected_severity
+    assert alerts[0].source_event_id == event.id
 
 
 def test_high_severity_alert_is_idempotent(app, agent):
