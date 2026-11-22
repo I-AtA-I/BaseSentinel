@@ -33,6 +33,11 @@ def detection_rules():
     return render_template("detection_rules.html")
 
 
+@web.get("/reports")
+def reports():
+    return render_template("reports.html")
+
+
 @web.get("/login")
 def login():
     return render_template("login.html")

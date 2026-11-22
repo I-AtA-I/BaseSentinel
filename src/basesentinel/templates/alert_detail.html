@@ -14,6 +14,15 @@
             } catch (_) {}
         })();
     </script>
+    <style>
+        .investigation-timeline{display:flex;flex-direction:column;gap:0;margin-top:14px}
+        .investigation-item{display:grid;grid-template-columns:165px minmax(0,1fr);gap:14px;padding:13px 0;border-top:1px solid var(--line)}
+        .investigation-time{color:var(--subtle);font-size:10px}
+        .investigation-event-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--text);font-size:11px;font-weight:800}
+        .investigation-message{margin:7px 0 0;color:var(--muted);font-size:11px;line-height:1.6;overflow-wrap:anywhere}
+        .investigation-link{display:inline-block;margin-top:6px;color:var(--accent);font-size:10px}
+        @media(max-width:650px){.investigation-item{grid-template-columns:1fr;gap:5px}}
+    </style>
 </head>
 <body>
 <div class="app-shell">
@@ -85,6 +94,18 @@
                 <div id="alert-source-event" class="alert-source-event">
                     <p class="muted">Loading source event...</p>
                 </div>
+            </section>
+
+            <section class="panel event-detail-panel">
+                <div class="panel-heading">
+                    <div><h2>Investigation timeline</h2><p class="muted">Events from the same endpoint within 30 minutes of this alert window</p></div>
+                    <span id="investigation-count" class="panel-tag">LOADING</span>
+                </div>
+                <div id="investigation-window" class="muted"></div>
+                <div id="investigation-timeline" class="investigation-timeline">
+                    <p class="muted">Loading related events...</p>
+                </div>
+                <p id="investigation-truncated" class="muted" hidden>The timeline is limited to the first 500 related events.</p>
             </section>
         </div>
 

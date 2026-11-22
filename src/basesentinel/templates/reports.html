@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#090a0c">
+    <title>Security reports | BaseSentinel</title>
+    <link rel="stylesheet" href="{{ url_for('web.static', filename='css/dashboard.css') }}">
+    <style>
+        .report-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+        .report-table{width:100%;border-collapse:collapse}
+        .report-table th,.report-table td{padding:10px 11px;border-bottom:1px solid var(--line);text-align:left;font-size:11px}
+        .report-table th{color:var(--subtle);font-size:9px;letter-spacing:.12em;text-transform:uppercase}
+        .report-table td{color:var(--muted)}
+        .report-table td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+        .report-bar-row{display:grid;grid-template-columns:120px minmax(50px,1fr) 55px;gap:10px;align-items:center;margin:10px 0;color:var(--muted);font-size:10px}
+        .report-bar{height:7px;background:var(--surface-3);overflow:hidden}
+        .report-bar span{display:block;height:100%;background:var(--accent)}
+        .report-note{color:var(--subtle);font-size:10px;line-height:1.5}
+        .report-downloads{display:flex;gap:8px;flex-wrap:wrap}
+        @media(max-width:850px){.report-grid{grid-template-columns:1fr}}
+    </style>
+    <script>
+        (() => {
+            try {
+                const saved = localStorage.getItem("basesentinel_theme");
+                if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+            } catch (_) {}
+        })();
+    </script>
+</head>
+<body>
+<div class="app-shell">
+    {% include "_sidebar.html" %}
+    <main class="main-content">
+        <header class="topbar">
+            <div><p class="eyebrow">SECURITY OPERATIONS / REPORTING</p><h1>Security reports<span style="color:var(--accent)">.</span></h1></div>
+            <div class="topbar-right"><div class="user-menu"><span id="user-initial" class="user-avatar">U</span><div><strong id="current-username">Loading</strong><small id="current-role">—</small></div><button id="logout-button" class="text-button" type="button">Sign out ↗</button></div></div>
+        </header>
+        <section class="dashboard-toolbar">
+            <div><span class="muted">Event trends, alert distribution and endpoint activity</span><span id="last-updated" class="last-updated">Waiting for data...</span></div>
+            <div class="toolbar-actions">
+                <select id="report-period"><option value="24">Last 24 hours</option><option value="168">Last 7 days</option><option value="720">Last 30 days</option></select>
+                <button id="refresh-report" class="secondary-button" type="button">↻ Refresh</button>
+            </div>
+        </section>
+        <div id="report-error" class="dashboard-error" role="alert" hidden></div>
+        <section class="dashboard-toolbar">
+            <div><span id="report-window" class="muted">Loading report period...</span></div>
+            <div class="report-downloads"><button id="download-csv" class="secondary-button" type="button">↓ Export CSV</button><button id="download-pdf" class="primary-button" type="button">↓ Export PDF</button></div>
+        </section>
+        <section class="metric-grid">
+            <article class="metric-card"><div class="metric-heading"><span>Security events</span><span class="metric-icon">⌁</span></div><strong id="metric-events" class="metric-value">—</strong><span class="metric-description">Received in selected period</span></article>
+            <article class="metric-card"><div class="metric-heading"><span>Alerts</span><span class="metric-icon alert-icon">△</span></div><strong id="metric-alerts" class="metric-value">—</strong><span class="metric-description">Updated in selected period</span></article>
+            <article class="metric-card"><div class="metric-heading"><span>Open alerts</span><span class="metric-icon warning-icon">!</span></div><strong id="metric-open" class="metric-value">—</strong><span class="metric-description">Currently require attention</span></article>
+            <article class="metric-card"><div class="metric-heading"><span>Active endpoints</span><span class="metric-icon agent-icon">●</span></div><strong id="metric-agents" class="metric-value">—</strong><span class="metric-description">Endpoints with event activity</span></article>
+        </section>
+        <div class="report-grid">
+            <section class="panel"><div class="panel-heading"><div><h2>Event trend</h2><p class="muted">Hourly or daily event volume</p></div><span class="panel-tag">TIMELINE</span></div><div id="report-trend"><p class="muted">Loading trend...</p></div></section>
+            <section class="panel"><div class="panel-heading"><div><h2>Events by severity</h2><p class="muted">Distribution across levels 0–10</p></div><span class="panel-tag">SEVERITY</span></div><div id="report-severity"><p class="muted">Loading severity...</p></div></section>
+            <section class="panel"><div class="panel-heading"><div><h2>Events by category</h2><p class="muted">Collected telemetry categories</p></div><span class="panel-tag">CATEGORIES</span></div><div class="table-scroll"><table class="report-table"><thead><tr><th>Category</th><th>Events</th></tr></thead><tbody id="report-categories"><tr><td colspan="2">Loading...</td></tr></tbody></table></div></section>
+            <section class="panel"><div class="panel-heading"><div><h2>Alert status</h2><p class="muted">Alert records last updated in this period</p></div><span class="panel-tag">ALERT QUEUE</span></div><div class="table-scroll"><table class="report-table"><thead><tr><th>Status</th><th>Alerts</th></tr></thead><tbody id="report-alert-status"><tr><td colspan="2">Loading...</td></tr></tbody></table></div></section>
+            <section class="panel"><div class="panel-heading"><div><h2>Endpoint activity</h2><p class="muted">Top 20 devices by received event count</p></div><span class="panel-tag">CLIENTS</span></div><div class="table-scroll"><table class="report-table"><thead><tr><th>Hostname</th><th>Events</th></tr></thead><tbody id="report-agents"><tr><td colspan="2">Loading...</td></tr></tbody></table></div></section>
+        </div>
+        <p id="report-truncation" class="report-note" hidden>Some report sections reached their safety limits. The export includes a note about truncated results.</p>
+    </main>
+</div>
+<script src="{{ url_for('web.static', filename='js/reports.js') }}" defer></script>
+</body>
+</html>
