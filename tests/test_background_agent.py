@@ -207,18 +207,24 @@ def test_console_python_executable_prefers_python_exe_for_pythonw(monkeypatch, t
     assert background.console_python_executable(str(pythonw)) == str(python)
 
 
-def test_console_python_executable_uses_base_interpreter_in_venv(
+def test_console_python_executable_keeps_active_venv_interpreter(
     monkeypatch,
     tmp_path,
 ):
     from types import SimpleNamespace
 
-    base_python = tmp_path / "python.exe"
+    venv_python = tmp_path / "venv" / "Scripts" / "python.exe"
+    base_python = tmp_path / "Python" / "python.exe"
+    venv_python.parent.mkdir(parents=True)
+    base_python.parent.mkdir(parents=True)
+    venv_python.touch()
     base_python.touch()
+
     monkeypatch.setattr(background, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(background.sys, "executable", str(venv_python))
     monkeypatch.setattr(background.sys, "_base_executable", str(base_python), raising=False)
 
-    assert background.console_python_executable() == str(base_python)
+    assert background.console_python_executable() == str(venv_python)
 
 
 def test_windowed_gui_entrypoint_is_registered_and_module_compiles():
