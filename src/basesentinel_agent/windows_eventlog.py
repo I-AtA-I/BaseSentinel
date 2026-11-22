@@ -39,6 +39,8 @@ _ALLOWED_EVENT_FIELDS = {
     "Error Code", "Detection User", "Origin Name", "Source Name", "Type",
     "Pre Execution Status", "Post Clean Status", "Action Success",
     "Security intelligence Version", "Engine Version",
+    "ID", "Threat ID", "Category", "Detection Origin", "Detection Type",
+    "Detection Source", "User", "Action", "Action Status", "Error description",
 }
 _MAX_BATCH = 1000
 _PNP_AUDIT_SUBCATEGORY = "{0CCE9248-69AE-11D9-BED3-505054503030}"
@@ -190,7 +192,7 @@ def _event_data(xml_text: str) -> dict:
     values = {}
     for item in root.findall(".//{*}EventData/{*}Data"):
         name = item.attrib.get("Name")
-        if name in _ALLOWED_EVENT_FIELDS and len(values) < 20:
+        if name in _ALLOWED_EVENT_FIELDS and len(values) < 32:
             values[name] = (item.text or "")[:512]
     return values
 
@@ -334,6 +336,8 @@ _DEFENDER_EVENT_MAP = {
 
 _DEFENDER_POWERSHELL = r"""
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = [Console]::OutputEncoding
 $checkpoint = {record_id}
 $channel = 'Microsoft-Windows-Windows Defender/Operational'
 try {{
