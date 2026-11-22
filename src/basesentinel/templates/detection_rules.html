@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#090a0c">
+    <title>Detection rules | BaseSentinel</title>
+    <link rel="stylesheet" href="{{ url_for('web.static', filename='css/dashboard.css') }}">
+    <style>
+        .rule-form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+        .rule-field{display:flex;flex-direction:column;gap:7px;color:var(--muted);font-size:11px;font-weight:700}
+        .rule-field input,.rule-field textarea,.rule-field select{width:100%;min-height:38px;padding:9px 11px;border:1px solid var(--line-strong);border-radius:0;background:var(--surface-2);color:var(--text);font:inherit}
+        .rule-field textarea{min-height:90px;resize:vertical;font-family:ui-monospace,Consolas,monospace}
+        .rule-field.wide{grid-column:1/-1}
+        .rule-actions{display:flex;gap:9px;align-items:center;margin-top:15px}
+        .rule-table{width:100%;border-collapse:collapse}
+        .rule-table th,.rule-table td{padding:13px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+        .rule-table th{color:var(--subtle);font-size:9px;letter-spacing:.13em;text-transform:uppercase}
+        .rule-table td{font-size:11px;color:var(--muted)}
+        .rule-name{display:block;color:var(--text);font-weight:800;margin-bottom:5px}
+        .rule-meta{display:block;color:var(--subtle);font-size:10px;line-height:1.5}
+        .rule-state{display:inline-block;padding:4px 7px;border:1px solid var(--line);font-size:9px;text-transform:uppercase;letter-spacing:.1em}
+        .rule-state.enabled{color:var(--success);border-color:var(--success)}
+        .rule-state.disabled{color:var(--muted)}
+        .rule-row-actions{display:flex;flex-wrap:wrap;gap:6px}
+        .rule-row-actions button{padding:6px 8px;border:1px solid var(--line-strong);background:var(--surface-2);color:var(--text);font-size:10px}
+        .rule-row-actions button:hover{border-color:var(--accent);color:var(--accent)}
+        .rule-row-actions .delete-rule:hover{border-color:var(--danger);color:var(--danger)}
+        .rule-help{margin:12px 0 0;color:var(--subtle);font-size:11px;line-height:1.6}
+        @media(max-width:900px){.rule-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+        @media(max-width:620px){.rule-form-grid{grid-template-columns:1fr}.rule-field.wide{grid-column:auto}.main-content{padding:22px 16px}}
+    </style>
+    <script>
+        (() => {
+            try {
+                const saved = localStorage.getItem("basesentinel_theme");
+                if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+            } catch (_) {}
+        })();
+    </script>
+</head>
+<body>
+<div class="app-shell">
+    {% include "_sidebar.html" %}
+    <main class="main-content">
+        <header class="topbar">
+            <div><p class="eyebrow">SECURITY OPERATIONS / DETECTION ENGINE</p><h1>Custom detection rules<span style="color:var(--accent)">.</span></h1></div>
+            <div class="topbar-right">
+                <div class="user-menu"><span id="user-initial" class="user-avatar">U</span><div><strong id="current-username">Loading</strong><small id="current-role">—</small></div><button id="logout-button" class="text-button" type="button">Sign out ↗</button></div>
+            </div>
+        </header>
+
+        <section class="dashboard-toolbar">
+            <div><span class="muted">Persistent server-side rules</span><span id="last-updated" class="last-updated">Loading...</span></div>
+            <div class="toolbar-actions"><button id="theme-toggle" class="theme-toggle" type="button"><span class="theme-symbol">◐</span><span class="theme-label">LIGHT MODE</span></button><button id="refresh-button" class="secondary-button" type="button">↻ Refresh</button></div>
+        </section>
+
+        <div id="rules-message" class="dashboard-error" role="status" hidden></div>
+
+        <section class="panel" id="rule-editor-panel">
+            <div class="panel-heading"><div><h2 id="editor-title">Create detection rule</h2><p class="muted">Rules are evaluated as new events enter the server.</p></div><span class="panel-tag">RULE EDITOR</span></div>
+            <form id="rule-form">
+                <div class="rule-form-grid">
+                    <label class="rule-field">Rule name<input id="rule-name" maxlength="120" required placeholder="Suspicious service registration"></label>
+                    <label class="rule-field">Event category<input id="rule-category" maxlength="32" placeholder="system"></label>
+                    <label class="rule-field">Event type<input id="rule-event-type" maxlength="80" placeholder="service.installed"></label>
+                    <label class="rule-field">Event source<input id="rule-source" maxlength="80" placeholder="Windows Security"></label>
+                    <label class="rule-field">Event code<input id="rule-event-code" maxlength="64" placeholder="7045"></label>
+                    <label class="rule-field">Minimum event severity<select id="rule-min-severity"><option value="">Any severity</option><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option></select></label>
+                    <label class="rule-field">Matching events required<input id="rule-threshold" type="number" min="1" max="100" value="1" required></label>
+                    <label class="rule-field">Correlation window (seconds)<input id="rule-window" type="number" min="1" max="86400" value="300" required></label>
+                    <label class="rule-field">Alert severity<select id="rule-severity"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option selected>9</option><option>10</option></select></label>
+                    <label class="rule-field wide">Description<input id="rule-description" maxlength="1000" placeholder="Why this pattern should be investigated."></label>
+                    <label class="rule-field wide">Event data conditions (JSON object)<textarea id="rule-conditions" spellcheck="false">{}</textarea></label>
+                </div>
+                <p class="rule-help">Conditions use exact matches against top-level event_data fields. For example: {"service_name":"UnexpectedService"}. The correlation window uses fixed UTC time buckets. A rule creates one alert per agent and time bucket once its threshold is reached.</p>
+                <div class="rule-actions"><button id="save-rule" class="primary-button" type="submit">Create rule</button><button id="cancel-edit" class="secondary-button" type="button" hidden>Cancel edit</button></div>
+            </form>
+        </section>
+
+        <section class="panel">
+            <div class="panel-heading"><div><h2>Configured rules</h2><p class="muted">Enable, disable, edit or remove custom detection logic.</p></div><span id="rules-count" class="panel-tag">— RULES</span></div>
+            <div class="table-scroll"><table class="rule-table"><thead><tr><th>Rule</th><th>Matching criteria</th><th>Correlation</th><th>Alert severity</th><th>Status</th><th>Actions</th></tr></thead><tbody id="rules-table"><tr><td colspan="6" class="table-empty">Loading detection rules...</td></tr></tbody></table></div>
+        </section>
+    </main>
+</div>
+<script src="{{ url_for('web.static', filename='js/detection-rules.js') }}" defer></script>
+</body>
+</html>
