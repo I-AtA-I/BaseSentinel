@@ -185,10 +185,9 @@ class DetectionService:
         path = path.replace("file:\\_", "", 1).replace("file:_", "", 1)
         path = path.replace("/", "\\").strip()
 
-        if not threat:
-            threat = "unknown-threat"
-        if not path:
-            path = "unknown-path"
+        if not threat or not path:
+            # Incomplete Defender metadata must never collapse unrelated detections.
+            return f"incomplete:{event.event_uid}", f"incomplete:{event.event_uid}"
         return threat, path
 
     @classmethod
@@ -202,17 +201,51 @@ class DetectionService:
     @classmethod
     def _detect_malware_incident(cls, event: SecurityEvent) -> Alert:
         threat, path = cls._malware_identity(event)
-        window_start, window_end, bucket_start = cls._malware_window(event.occurred_at)
-        deduplication_key = cls._fingerprint(
-            f"{event.agent_id}:microsoft-defender:{threat}:{path}:{bucket_start}"
+        _, _, bucket_start = cls._malware_window(event.occurred_at)
+        window_seconds = int(cls.MALWARE_CORRELATION_WINDOW.total_seconds())
+        event_time = event.occurred_at
+        candidate_keys = [
+            cls._fingerprint(
+                f"{event.agent_id}:microsoft-defender:{threat}:{path}:{bucket}"
+            )
+            for bucket in (
+                bucket_start - window_seconds,
+                bucket_start,
+                bucket_start + window_seconds,
+            )
+        ]
+        correlation_start = event_time - cls.MALWARE_CORRELATION_WINDOW
+        correlation_end = event_time + cls.MALWARE_CORRELATION_WINDOW
+
+        existing = db.session.scalar(
+            select(Alert)
+            .where(
+                Alert.rule_key == cls.MALWARE_INCIDENT_RULE,
+                Alert.deduplication_key.in_(candidate_keys),
+                Alert.last_seen_at >= correlation_start,
+                Alert.last_seen_at <= correlation_end,
+            )
+            .order_by(Alert.last_seen_at.desc())
+            .with_for_update()
+        )
+        deduplication_key = (
+            existing.deduplication_key
+            if existing is not None
+            else candidate_keys[1]
+        )
+
+        matching_start = (
+            min(existing.first_seen_at, correlation_start)
+            if existing is not None
+            else correlation_start
         )
         matching_events = db.session.scalars(
             select(SecurityEvent)
             .where(
                 SecurityEvent.agent_id == event.agent_id,
                 SecurityEvent.event_type.in_(cls.MALWARE_EVENT_TYPES),
-                SecurityEvent.occurred_at >= window_start,
-                SecurityEvent.occurred_at < window_end,
+                SecurityEvent.occurred_at >= matching_start,
+                SecurityEvent.occurred_at <= correlation_end,
             )
             .order_by(SecurityEvent.occurred_at.asc(), SecurityEvent.id.asc())
         ).all()
@@ -223,14 +256,6 @@ class DetectionService:
         if not matching_events:
             matching_events = [event]
 
-        existing = db.session.scalar(
-            select(Alert)
-            .where(
-                Alert.rule_key == cls.MALWARE_INCIDENT_RULE,
-                Alert.deduplication_key == deduplication_key,
-            )
-            .with_for_update()
-        )
         first_seen = matching_events[0].occurred_at
         last_seen = matching_events[-1].occurred_at
         now = utcnow_naive()
@@ -256,7 +281,7 @@ class DetectionService:
             description=(
                 f"Microsoft Defender detected {threat_label} at {path_label}. "
                 "Correlates detections and failed remediation attempts for the "
-                "same threat and file on this endpoint within a 30-minute window."
+                "same threat and file on this endpoint within a rolling 30-minute window."
             )[:4000],
             severity=10,
             status="open",
