@@ -6,6 +6,7 @@ from basesentinel import create_app, db
 from basesentinel.models import Agent, Asset, CorrelatedActivity, CorrelatedActivityEvent, SecurityEvent
 from basesentinel.services.correlation import CorrelationService
 from basesentinel.services.events import EventIngestionService
+from basesentinel.services.users import UserService
 
 
 class TestConfig:
@@ -118,3 +119,41 @@ def test_reprocessing_same_source_event_does_not_increase_count(app, agent):
     db.session.commit()
     assert activity.occurrence_count == 1
     assert CorrelatedActivityEvent.query.count() == 1
+
+
+@pytest.fixture
+def analyst_token(app):
+    with app.app_context():
+        UserService.create_user(
+            username="correlation_analyst",
+            password="test-password-123",
+            role="analyst",
+        )
+    client = app.test_client()
+    response = client.post("/api/v1/auth/login", json={
+        "username": "correlation_analyst",
+        "password": "test-password-123",
+    })
+    assert response.status_code == 200
+    return response.get_json()["token"]
+
+
+def test_correlated_activity_api_lists_and_expands_source_events(app, agent, analyst_token):
+    first = ingest_privilege_event(agent, "2026-11-22T11:05:52Z")
+    second = ingest_privilege_event(agent, "2026-11-22T11:05:55Z")
+    client = app.test_client()
+    headers = {"Authorization": f"Bearer {analyst_token}"}
+
+    listing = client.get("/api/v1/activities", headers=headers)
+    assert listing.status_code == 200
+    listed = listing.get_json()
+    assert listed["pagination"]["total"] == 1
+    activity_id = listed["items"][0]["id"]
+    assert listed["items"][0]["occurrence_count"] == 2
+
+    detail = client.get(f"/api/v1/activities/{activity_id}", headers=headers)
+    assert detail.status_code == 200
+    data = detail.get_json()
+    assert {item["id"] for item in data["source_events"]} == {
+        str(first.id), str(second.id),
+    }
