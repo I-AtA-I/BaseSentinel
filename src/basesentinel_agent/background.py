@@ -185,6 +185,7 @@ def start_background_worker(
             flags = (
                 getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
                 | getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+                | getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0x01000000)
             )
             popen_options["creationflags"] = flags
         else:

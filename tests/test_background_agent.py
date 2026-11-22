@@ -105,6 +105,11 @@ def test_start_worker_launches_detached_process_and_waits_for_lock(
     if os.name == "nt":
         assert captured["kwargs"]["creationflags"] & background.subprocess.CREATE_NO_WINDOW
         assert captured["kwargs"]["creationflags"] & background.subprocess.DETACHED_PROCESS
+        assert captured["kwargs"]["creationflags"] & getattr(
+            background.subprocess,
+            "CREATE_BREAKAWAY_FROM_JOB",
+            0x01000000,
+        )
     else:
         assert captured["kwargs"]["start_new_session"] is True
 
