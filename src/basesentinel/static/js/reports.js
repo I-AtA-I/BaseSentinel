@@ -81,7 +81,7 @@ function renderReport(report) {
     document.getElementById("metric-events").textContent = formatNumber(events.total);
     document.getElementById("metric-alerts").textContent = formatNumber(alerts.total);
     document.getElementById("metric-open").textContent = formatNumber(statuses.open);
-    document.getElementById("metric-agents").textContent = formatNumber((report.agent_activity || []).length);
+    document.getElementById("metric-agents").textContent = formatNumber(report.active_agent_count);
     document.getElementById("report-window").textContent =
         `From ${formatDate(report.period?.from)} to ${formatDate(report.period?.to)}`;
 
