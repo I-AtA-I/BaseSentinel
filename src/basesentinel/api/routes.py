@@ -515,6 +515,17 @@ def delete_agent(agent_id):
         deleted_alerts = db.session.execute(
             delete(Alert).where(Alert.agent_id == parsed_id)
         ).rowcount or 0
+        activity_ids = select(CorrelatedActivity.id).where(
+            CorrelatedActivity.agent_id == parsed_id
+        )
+        db.session.execute(
+            delete(CorrelatedActivityEvent).where(
+                CorrelatedActivityEvent.activity_id.in_(activity_ids)
+            )
+        )
+        db.session.execute(
+            delete(CorrelatedActivity).where(CorrelatedActivity.agent_id == parsed_id)
+        )
         deleted_events = db.session.execute(
             delete(SecurityEvent).where(SecurityEvent.agent_id == parsed_id)
         ).rowcount or 0
