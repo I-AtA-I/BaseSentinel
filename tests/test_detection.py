@@ -60,6 +60,7 @@ def ingest_event(
     minute=0,
     category="authentication",
     event_data=None,
+    occurred_at=None,
 ):
     payload = {
         "event_uid": str(uuid.uuid4()),
@@ -72,9 +73,7 @@ def ingest_event(
         "event_data": (
             event_data if event_data is not None else {"username": username}
         ),
-        "occurred_at": (
-            f"2026-11-17T15:{minute:02d}:00Z"
-        ),
+        "occurred_at": occurred_at or f"2026-11-17T15:{minute:02d}:00Z",
     }
 
     return EventIngestionService.ingest(
@@ -306,6 +305,38 @@ def test_defender_malware_records_for_same_threat_and_path_share_one_incident(
     assert Alert.query.filter_by(
         rule_key=DetectionService.MALWARE_INCIDENT_RULE
     ).count() == 1
+
+
+def test_defender_incident_stays_correlated_across_continuous_activity(app, agent):
+    identity = {
+        "ID": "2147925201",
+        "Threat Name": "Trojan:Win32/Pomal!rfn",
+        "Path": "C:\\Users\\MSI\\Downloads\\sample.exe",
+    }
+    timestamps = (
+        "2026-11-17T15:05:00Z",
+        "2026-11-17T15:25:00Z",
+        "2026-11-17T15:45:00Z",
+        "2026-11-17T16:05:00Z",
+        "2026-11-17T16:25:00Z",
+        "2026-11-17T16:45:00Z",
+    )
+    for timestamp in timestamps:
+        ingest_event(
+            agent,
+            severity=10,
+            event_type="malware.detected",
+            category="application",
+            event_data=identity,
+            occurred_at=timestamp,
+        )
+
+    incident = Alert.query.filter_by(
+        rule_key=DetectionService.MALWARE_INCIDENT_RULE
+    ).one()
+    assert incident.occurrence_count == len(timestamps)
+    assert incident.first_seen_at.isoformat() == "2026-11-17T15:05:00"
+    assert incident.last_seen_at.isoformat() == "2026-11-17T16:45:00"
 
 
 def test_defender_malware_different_threats_create_separate_incidents(app, agent):
