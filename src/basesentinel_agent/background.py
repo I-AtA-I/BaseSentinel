@@ -194,8 +194,20 @@ def agent_log_path(data_dir: Path | None = None) -> Path:
 
 
 def console_python_executable(executable: str | None = None) -> str:
-    """Use python.exe for CLI workers even when this GUI runs under pythonw.exe."""
+    """Return a console-capable interpreter without the Windows venv redirector."""
     selected = executable or sys.executable
+    if os.name == "nt" and executable is None:
+        # sys.executable points at the venv launcher (python.exe/pythonw.exe).
+        # Launch the base interpreter directly so the venv redirector cannot
+        # create a second console process when starting the background worker.
+        base_executable = getattr(sys, "_base_executable", None)
+        if base_executable:
+            base_path = Path(base_executable)
+            if base_path.name.lower() == "pythonw.exe":
+                base_path = base_path.with_name("python.exe")
+            if base_path.is_file():
+                return str(base_path)
+
     if os.name == "nt" and Path(selected).name.lower() == "pythonw.exe":
         console_executable = Path(selected).with_name("python.exe")
         if console_executable.is_file():
