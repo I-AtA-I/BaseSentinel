@@ -151,10 +151,13 @@ def _try_acquire_file_lock(
         handle.flush()
     handle.seek(0)
 
-    try:
-        if os.name == "nt":
-            return _try_acquire_windows_file_lock(handle, shared=shared)
+    if os.name == "nt":
+        # _try_acquire_windows_file_lock returns None only for
+        # ERROR_LOCK_VIOLATION. Other Windows API errors must remain visible;
+        # treating them as contention makes a stopped worker look active.
+        return _try_acquire_windows_file_lock(handle, shared=shared)
 
+    try:
         import fcntl
 
         operation = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
