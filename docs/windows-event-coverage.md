@@ -1,6 +1,6 @@
 # Windows event coverage
 
-The Windows agent collects an allowlist of events from the local Security event log.
+The Windows agent collects allowlisted events from the local Security event log and Microsoft Defender Operational channel. Each channel has its own durable record checkpoint.
 
 ## Current coverage
 
@@ -21,6 +21,10 @@ The Windows agent collects an allowlist of events from the local Security event 
 | 4733 | Member removed from a security-enabled local group | `group.member_removed` | Event only |
 | 6416 | New external device recognized (USB storage only) | `device.usb_storage_recognized` | One correlated alert per agent and device ID |
 | 1102 | Security audit log cleared | `security_log.cleared` | Critical alert |
+| 1116 | Microsoft Defender malware detected | `malware.detected` | Critical alert |
+| 1117 | Microsoft Defender remediation action | `malware.remediation_completed` | Informational event |
+| 1118 | Microsoft Defender remediation failed | `malware.remediation_failed` | Critical alert |
+| 1121 | Attack Surface Reduction blocked activity | `attack_surface_reduction.blocked` | High-priority alert |
 
 ## USB storage monitoring
 
@@ -37,7 +41,14 @@ The agent checks this policy when collection starts. If Success auditing is disa
 
 A recognized USB mass-storage device is stored as an individual event for the timeline. In Alerts, BaseSentinel correlates event 6416 records by agent and normalized `DeviceId`, so repeated recognition records for the same device update one alert and its occurrence count instead of creating a new alert for every record. The first event remains the alert source-event link; all raw recognition records remain independently available in Events. The occurrence count represents Windows recognition records, not confirmed physical plug-in sessions.
 
+## Microsoft Defender telemetry
+
+The agent also reads the Microsoft-Windows-Windows Defender/Operational channel. Event 1116 creates a critical malware alert; 1117 records a remediation action as informational telemetry; 1118 creates a critical alert when remediation fails; and 1121 creates a high-priority alert when an Attack Surface Reduction rule blocks activity. The collector uses a separate durable checkpoint, so Defender records do not interfere with the Security log checkpoint.
+
+The Defender Operational channel must be enabled and readable by the agent account. If it is unavailable, the agent reports a telemetry warning and continues collecting the Security channel. Malware detection is based on Defender's own detections; BaseSentinel does not independently scan files or claim that an endpoint is malware-free.
+
 **Coverage limitations and next telemetry sources:**
 - Event 6416 reports when Windows first recognizes a new external device. It is not a guaranteed record of every later unplug/replug cycle. Repeated connection and removal monitoring requires separate Kernel-PnP channels and independent durable checkpoints.
 - Event 4697 reports a newly installed Windows service; it does not prove that an executable is unsigned and does not cover every ordinary application installation. Reliable unsigned-program detection needs additional executable/signature inventory or AppLocker/Code Integrity telemetry.
-- This collector does not yet ingest Windows Defender malware-detection events or Windows camera/microphone privacy-access events. Those require dedicated event-channel collection and separate checkpoints. They must not be represented as monitored until that telemetry is implemented.
+- Process execution and suspicious command-line analytics are not yet collected. Reliable coverage needs Sysmon or Windows Security process-creation auditing (including command-line policy) and a separately validated event schema.
+- Camera/microphone privacy-access events are not yet collected.
