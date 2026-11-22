@@ -237,6 +237,17 @@ def test_alerts_page_supports_exact_severity_drilldown(client):
 
 
 
+def test_agent_health_page_is_available(client):
+    response = client.get("/agent-health")
+    assert response.status_code == 200
+    assert b"Agent health" in response.data
+    assert b"/static/js/agent-health.js" in response.data
+
+
+def test_agent_health_javascript_is_available(client):
+    response = client.get("/static/js/agent-health.js")
+    assert response.status_code == 200
+    assert b"/operations/agents" in response.data
 def test_detection_rules_page_is_available(client):
     response = client.get("/detection-rules")
     assert response.status_code == 200

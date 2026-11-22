@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#090a0c">
+    <title>Agent health | BaseSentinel</title>
+    <link rel="stylesheet" href="{{ url_for('web.static', filename='css/dashboard.css') }}">
+    <style>
+        .health-banner{margin-bottom:18px;padding:14px 16px;border:1px solid var(--line);background:var(--surface-2);color:var(--muted);font-size:12px;line-height:1.6}
+        .health-banner.warning{border-color:var(--warning);color:var(--warning);background:var(--warning-soft)}
+        .health-banner.success{border-color:var(--success);color:var(--success);background:var(--success-soft)}
+        .health-table{width:100%;border-collapse:collapse}
+        .health-table th,.health-table td{padding:13px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+        .health-table th{color:var(--subtle);font-size:9px;letter-spacing:.13em;text-transform:uppercase}
+        .health-table td{color:var(--muted);font-size:11px}
+        .health-host{display:block;color:var(--text);font-weight:800;margin-bottom:4px}
+        .health-meta{display:block;color:var(--subtle);font-size:10px;margin-top:4px}
+        .health-state{display:inline-block;padding:5px 8px;border:1px solid var(--line);font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.1em}
+        .health-state.online{color:var(--success);border-color:var(--success)}
+        .health-state.stale{color:var(--warning);border-color:var(--warning)}
+        .health-state.disconnected{color:var(--danger);border-color:var(--danger)}
+        .health-state.inactive{color:var(--muted)}
+        .health-table a{color:var(--accent)}
+        @media(max-width:900px){.health-table{min-width:850px}}
+    </style>
+    <script>
+        (() => {
+            try {
+                const saved = localStorage.getItem("basesentinel_theme");
+                if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+            } catch (_) {}
+        })();
+    </script>
+</head>
+<body>
+<div class="app-shell">
+    {% include "_sidebar.html" %}
+    <main class="main-content">
+        <header class="topbar">
+            <div><p class="eyebrow">SECURITY OPERATIONS / ENDPOINT TELEMETRY</p><h1>Agent health<span style="color:var(--accent)">.</span></h1></div>
+            <div class="topbar-right"><div class="user-menu"><span id="user-initial" class="user-avatar">U</span><div><strong id="current-username">Loading</strong><small id="current-role">—</small></div><button id="logout-button" class="text-button" type="button">Sign out ↗</button></div></div>
+        </header>
+        <section class="dashboard-toolbar">
+            <div><span class="muted">Heartbeat and collection status</span><span id="last-updated" class="last-updated">Waiting for data...</span></div>
+            <div class="toolbar-actions"><button id="theme-toggle" class="theme-toggle" type="button"><span class="theme-symbol">◐</span><span class="theme-label">LIGHT MODE</span></button><button id="refresh-button" class="secondary-button" type="button">↻ Refresh</button></div>
+        </section>
+        <div id="health-error" class="dashboard-error" role="alert" hidden></div>
+        <div id="health-banner" class="health-banner" role="status">Checking endpoint health...</div>
+        <section class="metric-grid">
+            <article class="metric-card"><div class="metric-heading"><span>Online</span><span class="metric-icon agent-icon">●</span></div><strong id="count-online" class="metric-value">—</strong><span class="metric-description">Heartbeat within 5 minutes</span></article>
+            <article class="metric-card"><div class="metric-heading"><span>Stale</span><span class="metric-icon warning-icon">!</span></div><strong id="count-stale" class="metric-value">—</strong><span class="metric-description">No heartbeat for 5–15 minutes</span></article>
+            <article class="metric-card"><div class="metric-heading"><span>Disconnected</span><span class="metric-icon alert-icon">×</span></div><strong id="count-disconnected" class="metric-value">—</strong><span class="metric-description">No heartbeat for over 15 minutes</span></article>
+            <article class="metric-card"><div class="metric-heading"><span>Inactive</span><span class="metric-icon">—</span></div><strong id="count-inactive" class="metric-value">—</strong><span class="metric-description">Revoked, uninstalled or inactive</span></article>
+        </section>
+        <section class="panel">
+            <div class="panel-heading"><div><h2>Endpoint inventory health</h2><p class="muted">Last check-in, agent version and most recently received event.</p></div><span class="panel-tag">AUTO REFRESH · 15S</span></div>
+            <div class="table-scroll"><table class="health-table"><thead><tr><th>Endpoint</th><th>Health</th><th>Agent version</th><th>Last heartbeat</th><th>Last event</th><th>Last event type</th></tr></thead><tbody id="health-table"><tr><td colspan="6" class="table-empty">Loading endpoint status...</td></tr></tbody></table></div>
+        </section>
+    </main>
+</div>
+<script src="{{ url_for('web.static', filename='js/agent-health.js') }}" defer></script>
+</body>
+</html>

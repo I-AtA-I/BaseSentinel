@@ -43,6 +43,11 @@ def enrollment_settings():
     return render_template("enrollment_settings.html")
 
 
+@web.get("/agent-health")
+def agent_health():
+    return render_template("agent_health.html")
+
+
 @web.get("/agents")
 def agents():
     return render_template("agents.html")
