@@ -96,7 +96,8 @@ def _validate_rule(data):
         ("window_seconds", 1, 86400, False),
         ("severity", 0, 10, False),
     ):
-        value = data.get(field)
+        defaults = {"threshold": 1, "window_seconds": 300, "severity": 7}
+        value = data.get(field, defaults.get(field))
         if value is None and optional:
             result[field] = None
             continue
