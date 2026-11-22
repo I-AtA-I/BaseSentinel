@@ -1,5 +1,6 @@
 from basesentinel.models.sessions import UserSession
 from basesentinel.models.events import SecurityEvent
+from basesentinel.models.activities import CorrelatedActivity, CorrelatedActivityEvent
 from basesentinel.models.alerts import Alert
 
 from basesentinel.models.assets import (
@@ -32,6 +33,8 @@ __all__ = [
     "AgentInvitation",
     "AgentEnrollmentRequest",
     "SecurityEvent",
+    "CorrelatedActivity",
+    "CorrelatedActivityEvent",
     "UserSession",
     "Alert",
     "DetectionRule",
