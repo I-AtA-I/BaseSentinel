@@ -203,6 +203,16 @@ def console_python_executable(executable: str | None = None) -> str:
     return selected
 
 
+def windowless_python_executable(executable: str | None = None) -> str:
+    """Return the active environment's windowed interpreter for detached workers."""
+    selected = executable or sys.executable
+    if os.name == "nt" and Path(selected).name.lower() == "python.exe":
+        windowed_executable = Path(selected).with_name("pythonw.exe")
+        if windowed_executable.is_file():
+            return str(windowed_executable)
+    return selected
+
+
 def _try_acquire_file_lock(
     data_dir: Path | None = None,
     *,
@@ -327,7 +337,7 @@ def start_background_worker(
         except FileNotFoundError:
             pass
 
-    executable = console_python_executable(python_executable)
+    executable = windowless_python_executable(python_executable)
     command = [
         executable,
         "-u",
