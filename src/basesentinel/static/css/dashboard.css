@@ -859,3 +859,21 @@ tbody tr:last-child td { border-bottom: 0; }
 .category-row-link > strong {
     text-align: right;
 }
+
+
+/* Alert detail navigation */
+.alert-detail-link {
+    color: var(--text);
+    font-weight: 750;
+    text-decoration: none;
+}
+.alert-detail-link:hover,
+.alert-detail-link:focus-visible {
+    color: var(--accent);
+    text-decoration: underline;
+}
+.alert-source-event { display: grid; gap: 14px; }
+.alert-source-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.alert-source-meta > strong { color: var(--text); font-size: 13px; }
+.alert-source-fields { margin-top: 4px; }
+.alert-source-link { display: inline-flex; width: fit-content; }

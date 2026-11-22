@@ -23,6 +23,11 @@ def alerts():
     return render_template("alerts.html")
 
 
+@web.get("/alerts/<alert_id>")
+def alert_detail(alert_id):
+    return render_template("alert_detail.html", alert_id=alert_id)
+
+
 @web.get("/login")
 def login():
     return render_template("login.html")

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#090a0c">
+    <title>Alert details | BaseSentinel</title>
+    <link rel="stylesheet" href="{{ url_for('web.static', filename='css/dashboard.css') }}">
+    <script>
+        (() => {
+            try {
+                const saved = localStorage.getItem("basesentinel_theme");
+                if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+            } catch (_) {}
+        })();
+    </script>
+</head>
+<body>
+<div class="app-shell">
+    {% include "_sidebar.html" %}
+    <main class="main-content" id="alert-detail-root" data-alert-id="{{ alert_id }}">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">SECURITY OPERATIONS / ALERT DETAILS</p>
+                <h1 id="alert-title">Loading alert<span style="color:var(--accent)">.</span></h1>
+                <p id="alert-subtitle" class="muted">Loading detection context...</p>
+            </div>
+            <div class="user-menu">
+                <strong id="current-username">Loading</strong>
+                <small id="current-role">—</small>
+                <button id="logout-button" class="text-button" type="button">Sign out ↗</button>
+            </div>
+        </header>
+
+        <section class="dashboard-toolbar">
+            <div><a class="secondary-button event-back-link" href="/alerts">← Back to alert registry</a></div>
+            <div class="toolbar-actions">
+                <button id="theme-toggle" class="theme-toggle" type="button">
+                    <span class="theme-symbol">◐</span><span class="theme-label">LIGHT MODE</span>
+                </button>
+            </div>
+        </section>
+
+        <div id="alert-error" class="dashboard-error" role="alert" hidden></div>
+        <div id="alert-detail-content" class="event-detail-content" hidden>
+            <section class="event-detail-hero panel">
+                <div>
+                    <p class="eyebrow">DETECTION</p>
+                    <h2 id="alert-heading">Alert context</h2>
+                    <p id="alert-description" class="event-message"></p>
+                </div>
+                <div id="alert-level" class="event-level"></div>
+            </section>
+
+            <div class="event-detail-columns">
+                <section class="panel event-detail-panel">
+                    <div class="panel-heading"><div><h2>Alert information</h2><p class="muted">Detection state and correlation</p></div></div>
+                    <dl class="event-detail-list">
+                        <div><dt>Status</dt><dd id="alert-status">—</dd></div>
+                        <div><dt>Occurrences</dt><dd id="alert-occurrences">—</dd></div>
+                        <div><dt>Rule key</dt><dd id="alert-rule" class="event-mono">—</dd></div>
+                        <div><dt>First seen</dt><dd id="alert-first-seen">—</dd></div>
+                        <div><dt>Last seen</dt><dd id="alert-last-seen">—</dd></div>
+                        <div><dt>Alert ID</dt><dd id="alert-id" class="event-mono">—</dd></div>
+                    </dl>
+                </section>
+
+                <section class="panel event-detail-panel">
+                    <div class="panel-heading"><div><h2>Reporting device</h2><p class="muted">Endpoint associated with this detection</p></div></div>
+                    <h3 id="alert-device-name" class="event-device-heading">—</h3>
+                    <dl class="event-detail-list">
+                        <div><dt>Hostname</dt><dd id="alert-hostname">—</dd></div>
+                        <div><dt>Platform</dt><dd id="alert-platform">—</dd></div>
+                        <div><dt>Agent version</dt><dd id="alert-agent-version">—</dd></div>
+                        <div><dt>Agent ID</dt><dd id="alert-agent-id" class="event-mono">—</dd></div>
+                    </dl>
+                </section>
+            </div>
+
+            <section class="panel event-detail-panel">
+                <div class="panel-heading">
+                    <div><h2>Source event</h2><p class="muted">Original event linked to this detection</p></div>
+                    <span class="panel-tag">SOURCE EVIDENCE</span>
+                </div>
+                <div id="alert-source-event" class="alert-source-event">
+                    <p class="muted">Loading source event...</p>
+                </div>
+            </section>
+        </div>
+
+        <footer class="page-footer">
+            <span>BASESENTINEL / LOCAL INSTANCE</span>
+            <a href="/alerts">← Back to alert registry</a>
+        </footer>
+    </main>
+</div>
+<script src="{{ url_for('web.static', filename='js/alert-detail.js') }}" defer></script>
+</body>
+</html>
