@@ -35,6 +35,10 @@ _ALLOWED_EVENT_FIELDS = {
     "DeviceDescription", "DeviceName", "ClassId", "ClassName",
     "VendorIds", "CompatibleIds", "LocationInformation", "LocationPaths",
     "ContainerId", "ManufacturerName",
+    "Threat Name", "Path", "Process Name", "Detection Time", "Action Name",
+    "Error Code", "Detection User", "Origin Name", "Source Name", "Type",
+    "Pre Execution Status", "Post Clean Status", "Action Success",
+    "Security intelligence Version", "Engine Version",
 }
 _MAX_BATCH = 1000
 _PNP_AUDIT_SUBCATEGORY = "{0CCE9248-69AE-11D9-BED3-505054503030}"
@@ -315,5 +319,137 @@ def collect_security_events(last_record_id: int = 0) -> tuple[list[dict], int]:
         next_checkpoint = max(record_ids)
     else:
         # A short page means all matching events up to the current log tail were read.
+        next_checkpoint = latest_record_id
+    return events, next_checkpoint
+
+
+
+_DEFENDER_EVENT_MAP = {
+    1116: ("application", "malware.detected", 10),
+    1117: ("application", "malware.remediation_completed", 3),
+    1118: ("application", "malware.remediation_failed", 10),
+    1121: ("application", "attack_surface_reduction.blocked", 8),
+}
+
+
+_DEFENDER_POWERSHELL = r"""
+$ErrorActionPreference = 'Stop'
+$checkpoint = {record_id}
+$channel = 'Microsoft-Windows-Windows Defender/Operational'
+try {{
+    $log = Get-WinEvent -ListLog $channel -ErrorAction Stop
+    if (-not $log.IsEnabled) {{
+        throw 'The Microsoft Defender Operational event log is disabled.'
+    }}
+    $latestId = 0
+    if ([long]$log.RecordCount -gt 0) {{
+        $latest = Get-WinEvent -LogName $channel -MaxEvents 1 -ErrorAction Stop
+        if ($null -ne $latest) {{ $latestId = [long]$latest.RecordId }}
+    }}
+    if ($checkpoint -gt $latestId) {{ $checkpoint = 0 }}
+    $xpath = "*[System[(EventID=1116 or EventID=1117 or EventID=1118 or EventID=1121) and (EventRecordID > $checkpoint)]]"
+    $events = @(Get-WinEvent -LogName $channel -FilterXPath $xpath -Oldest -MaxEvents {_max_batch} -ErrorAction SilentlyContinue | ForEach-Object {{
+        [pscustomobject]@{{
+            Id = $_.Id
+            RecordId = $_.RecordId
+            TimeCreated = $_.TimeCreated.ToUniversalTime().ToString('o')
+            MachineName = $_.MachineName
+            Message = $_.Message
+            Xml = $_.ToXml()
+        }}
+    }})
+    [pscustomobject]@{{ LatestRecordId = $latestId; Events = $events }} |
+        ConvertTo-Json -Depth 5 -Compress
+}}
+catch {{
+    [Console]::Error.WriteLine($_.Exception.Message)
+    exit 2
+}}
+"""
+
+
+def collect_defender_events(last_record_id: int = 0) -> tuple[list[dict], int]:
+    """Read malware and Attack Surface Reduction events from Defender Operational."""
+    if type(last_record_id) is not int or last_record_id < 0:
+        raise ValueError("Invalid Windows Defender event record checkpoint.")
+
+    script = _DEFENDER_POWERSHELL.format(
+        record_id=last_record_id,
+        _max_batch=_MAX_BATCH,
+    )
+    try:
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=45,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("Reading the Windows Defender event log timed out.") from exc
+    except OSError as exc:
+        raise RuntimeError("Could not start PowerShell to read the Windows Defender event log.") from exc
+
+    if result.returncode != 0:
+        detail = result.stderr.strip()[:300]
+        raise RuntimeError(
+            "Could not read the Windows Defender Operational event log."
+            + (f" Details: {detail}" if detail else "")
+        )
+
+    try:
+        raw = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Windows Defender event log returned invalid data.") from exc
+    if not isinstance(raw, dict) or not isinstance(raw.get("Events"), list):
+        raise RuntimeError("Windows Defender event log returned an unexpected response.")
+
+    try:
+        latest_record_id = max(0, int(raw.get("LatestRecordId") or 0))
+    except (TypeError, ValueError):
+        raise RuntimeError("Windows Defender event log returned an invalid checkpoint.") from None
+
+    events = []
+    record_ids = []
+    for item in raw["Events"]:
+        if not isinstance(item, dict) or item.get("Id") not in _DEFENDER_EVENT_MAP:
+            continue
+        category, event_type, severity = _DEFENDER_EVENT_MAP[item["Id"]]
+        record_id = item.get("RecordId")
+        computer = str(item.get("MachineName") or "windows-host")
+        if record_id is None:
+            continue
+        try:
+            record_id = int(record_id)
+            occurred_at = datetime.fromisoformat(item["TimeCreated"].replace("Z", "+00:00"))
+            event_data = _event_data(item["Xml"])
+        except (KeyError, ValueError, ET.ParseError, TypeError):
+            continue
+        record_ids.append(record_id)
+        event_data.update({"record_id": record_id, "computer": computer})
+        message = str(item.get("Message") or f"Microsoft Defender event {item['Id']}")[:4096].strip()
+        if not message:
+            message = f"Microsoft Defender event {item['Id']}"
+        events.append({
+            "event_uid": str(uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"windows-defender:{computer}:{record_id}:{item['Id']}:{item['TimeCreated']}",
+            )),
+            "schema_version": 1,
+            "category": category,
+            "event_type": event_type,
+            "severity": severity,
+            "source": "Microsoft Defender",
+            "event_code": str(item["Id"]),
+            "message": message,
+            "event_data": event_data,
+            "occurred_at": occurred_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
+        })
+
+    if len(raw["Events"]) >= _MAX_BATCH and record_ids:
+        next_checkpoint = max(record_ids)
+    else:
         next_checkpoint = latest_record_id
     return events, next_checkpoint
