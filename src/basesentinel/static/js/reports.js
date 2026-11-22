@@ -107,6 +107,11 @@ function renderReport(report) {
         ? categories.map(([name, count]) => `<tr><td>${escapeHtml(name)}</td><td>${formatNumber(count)}</td></tr>`).join("")
         : '<tr><td colspan="2">No events in this period.</td></tr>';
 
+    const statuses = Object.entries(alerts.by_status || {});
+    document.getElementById("report-alert-status").innerHTML = statuses.length
+        ? statuses.map(([status, count]) => `<tr><td>${escapeHtml(status)}</td><td>${formatNumber(count)}</td></tr>`).join("")
+        : '<tr><td colspan="2">No alert activity.</td></tr>';
+
     const agents = report.agent_activity || [];
     document.getElementById("report-agents").innerHTML = agents.length
         ? agents.map((agent) => `<tr><td>${escapeHtml(agent.hostname || "Unknown")}</td><td>${formatNumber(agent.event_count)}</td></tr>`).join("")
