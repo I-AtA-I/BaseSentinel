@@ -19,6 +19,7 @@ from basesentinel_agent.client import AgentApiError, BaseSentinelClient
 from basesentinel_agent.queue import EventQueue
 from basesentinel_agent.storage import AgentConfigStore, default_data_dir
 from basesentinel_agent.windows_eventlog import (
+    collect_defender_events,
     collect_security_events,
     ensure_pnp_audit_activity,
 )
@@ -99,14 +100,28 @@ def _collect_and_send(
 ) -> tuple[int, int, int, int]:
     checkpoint = queue.security_checkpoint()
     discovered, next_checkpoint = collect_security_events(checkpoint)
-    queue.add_batch_and_checkpoint(discovered, next_checkpoint)
+    queue.add_batch_and_checkpoint(discovered, next_checkpoint, channel="security")
+
+    defender_discovered = 0
+    try:
+        defender_checkpoint = queue.defender_checkpoint()
+        defender_events, next_defender_checkpoint = collect_defender_events(defender_checkpoint)
+        queue.add_batch_and_checkpoint(
+            defender_events,
+            next_defender_checkpoint,
+            channel="defender",
+        )
+        defender_discovered = len(defender_events)
+    except RuntimeError as exc:
+        print(f"Microsoft Defender telemetry unavailable: {exc}")
+
     sent, pending = _deliver_pending(
         client,
         queue,
         batch_size,
         stop_event=stop_event,
     )
-    return len(discovered), sent, pending, next_checkpoint
+    return len(discovered) + defender_discovered, sent, pending, next_checkpoint
 
 
 def collect(args) -> int:
