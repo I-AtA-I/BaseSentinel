@@ -385,6 +385,8 @@ async function initializeAlerts() {
             ? `Level ${severityMin}`
             : `Levels ${severityMin}–${severityMax}`;
         context.hidden = false;
+        document.getElementById("severity-events-link").href =
+            `/events?severity_min=${severityMin}&severity_max=${severityMax}`;
     }
 
     applyTheme(document.documentElement.dataset.theme || "dark");
