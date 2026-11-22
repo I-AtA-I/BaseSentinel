@@ -419,7 +419,23 @@ def export_security_report_pdf():
         ("TOPPADDING", (0, 0), (-1, -1), 4),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
     ]))
-    story.extend([severity_table, Paragraph("Events by category", styles["ReportSection"])])
+    story.extend([severity_table, Paragraph("Event trend", styles["ReportSection"])])
+
+    trend_data = [["UTC bucket", "Events"]] + [
+        [item["bucket"], str(item["count"])]
+        for item in report["events"]["trend"]
+    ]
+    if len(trend_data) == 1:
+        trend_data.append(["No activity", "0"])
+    trend_table = Table(trend_data, colWidths=[60 * mm, 35 * mm], repeatRows=1)
+    trend_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#202a35")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#c4cdd5")),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("ALIGN", (1, 1), (1, -1), "RIGHT"),
+    ]))
+    story.extend([trend_table, Paragraph("Events by category", styles["ReportSection"])])
 
     category_data = [["Category", "Event count"]] + [
         [Paragraph(escape(name), styles["ReportSmall"]), str(count)]
