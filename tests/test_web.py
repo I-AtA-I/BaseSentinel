@@ -265,3 +265,24 @@ def test_detection_rules_page_is_in_shared_navigation(client):
     response = client.get("/detection-rules")
     assert response.status_code == 200
     assert b'href="/detection-rules"' in response.data
+
+
+def test_security_reports_page_is_available(client):
+    response = client.get("/reports")
+    assert response.status_code == 200
+    assert b"Security reports" in response.data
+    assert b"/static/js/reports.js" in response.data
+
+
+def test_security_reports_javascript_is_available(client):
+    response = client.get("/static/js/reports.js")
+    assert response.status_code == 200
+    assert b"/reports/security/summary" in response.data
+
+
+def test_alert_detail_includes_investigation_timeline(client):
+    response = client.get("/alerts/12345678-1234-1234-1234-123456789abc")
+    assert response.status_code == 200
+    assert b"Investigation timeline" in response.data
+    javascript = client.get("/static/js/alert-detail.js")
+    assert b"/operations/alerts/" in javascript.data
