@@ -36,10 +36,6 @@ def upgrade():
             ondelete="RESTRICT",
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "activity_type", "correlation_key",
-            name="uq_correlated_activities_type_key",
-        ),
     )
     op.create_index(
         "ix_correlated_activities_agent_last_seen",
@@ -48,6 +44,10 @@ def upgrade():
     op.create_index(
         "ix_correlated_activities_last_seen",
         "correlated_activities", ["last_seen_at"],
+    )
+    op.create_index(
+        "ix_correlated_activities_type_key_seen",
+        "correlated_activities", ["activity_type", "correlation_key", "last_seen_at"],
     )
     op.create_table(
         "correlated_activity_events",
@@ -80,6 +80,6 @@ def upgrade():
 def downgrade():
     op.drop_index("ix_correlated_activity_events_event", table_name="correlated_activity_events")
     op.drop_table("correlated_activity_events")
-    op.drop_index("ix_correlated_activities_last_seen", table_name="correlated_activities")
+    op.drop_index("ix_correlated_activities_type_key_seen", table_name="correlated_activities")\n    op.drop_index("ix_correlated_activities_last_seen", table_name="correlated_activities")
     op.drop_index("ix_correlated_activities_agent_last_seen", table_name="correlated_activities")
     op.drop_table("correlated_activities")
