@@ -12,6 +12,10 @@ def dashboard():
 def events():
     return render_template("events.html")
 
+@web.get("/activities")
+def activities():
+    return render_template("activities.html")
+
 
 @web.get("/events/<event_id>")
 def event_detail(event_id):
