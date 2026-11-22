@@ -11,14 +11,14 @@ The Windows agent collects allowlisted events from the local Security event log 
 | 4672 | Special privileges assigned to a logon | `privilege.special_assignment` | Event only |
 | 4697 | Service installed | `service.installed` | High-priority alert |
 | 4719 | System audit policy changed | `audit.policy_changed` | High-priority alert |
-| 4720 | User account created | `account.created` | Event only |
-| 4722 | User account enabled | `account.enabled` | Event only |
+| 4720 | User account created | `account.created` | High-priority alert |
+| 4722 | User account enabled | `account.enabled` | High-priority alert |
 | 4723 | Password change attempted | `password.change_attempted` | Event only |
-| 4724 | Password reset attempted | `password.reset` | Event only |
+| 4724 | Password reset attempted | `password.reset` | High-priority alert |
 | 4725 | User account disabled | `account.disabled` | Event only |
 | 4726 | User account deleted | `account.deleted` | High-priority alert |
 | 4732 | Member added to a security-enabled local group | `group.member_added` | High-priority alert |
-| 4733 | Member removed from a security-enabled local group | `group.member_removed` | Event only |
+| 4733 | Member removed from a security-enabled local group | `group.member_removed` | High-priority alert |
 | 6416 | New external device recognized (USB storage only) | `device.usb_storage_recognized` | One correlated alert per agent and device ID |
 | 1102 | Security audit log cleared | `security_log.cleared` | Critical alert |
 | 1116 | Microsoft Defender malware detected | `malware.detected` | Critical alert |
