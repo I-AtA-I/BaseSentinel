@@ -451,7 +451,21 @@ def export_security_report_pdf():
         ("FONTSIZE", (0, 0), (-1, -1), 8),
         ("ALIGN", (1, 1), (1, -1), "RIGHT"),
     ]))
-    story.extend([category_table, Paragraph("Endpoint activity", styles["ReportSection"])])
+    story.extend([category_table, Paragraph("Alert status", styles["ReportSection"])])
+
+    alert_status_data = [["Status", "Alert count"]] + [
+        [status, str(count)]
+        for status, count in report["alerts"]["by_status"].items()
+    ]
+    alert_status_table = Table(alert_status_data, colWidths=[60 * mm, 35 * mm])
+    alert_status_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#202a35")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#c4cdd5")),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("ALIGN", (1, 1), (1, -1), "RIGHT"),
+    ]))
+    story.extend([alert_status_table, Paragraph("Endpoint activity", styles["ReportSection"])])
 
     agent_data = [["Hostname", "Events", "Severity 7–10"]] + [
         [
