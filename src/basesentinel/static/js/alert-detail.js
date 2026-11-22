@@ -122,6 +122,45 @@ function renderAlert(alert) {
     $("alert-detail-content").hidden = false;
 }
 
+
+function renderInvestigation(data) {
+    const events = data.related_events || [];
+    $("investigation-count").textContent = `${events.length} EVENTS`;
+    $("investigation-window").textContent =
+        `Window: ${formatDate(data.window?.from)} – ${formatDate(data.window?.to)}`;
+    $("investigation-truncated").hidden = !data.truncated;
+
+    if (!events.length) {
+        $("investigation-timeline").innerHTML =
+            '<p class="muted">No related events were found in this investigation window.</p>';
+        return;
+    }
+
+    $("investigation-timeline").innerHTML = events.map((event) => {
+        const severity = Number(event.severity);
+        const link = event.id
+            ? `<a class="investigation-link" href="/events/${encodeURIComponent(event.id)}">Open event details ↗</a>`
+            : "";
+        return `<article class="investigation-item">
+            <div class="investigation-time">${escapeHtml(formatDate(event.occurred_at))}</div>
+            <div>
+                <div class="investigation-event-title">
+                    <span>${escapeHtml(event.event_type || "Security event")}</span>
+                    <span class="severity-label ${severityClass(severity)}">Level ${severity} · ${severityName(severity)}</span>
+                </div>
+                <p class="investigation-message">${escapeHtml(event.message || "No event message was recorded.")}</p>
+                <span class="event-mono muted">${escapeHtml(event.category || "—")} · ${escapeHtml(event.source || "—")} · ${escapeHtml(event.event_code || "—")}</span>
+                ${link}
+            </div>
+        </article>`;
+    }).join("");
+}
+
+function renderInvestigationError(message) {
+    $("investigation-count").textContent = "UNAVAILABLE";
+    $("investigation-timeline").textContent = message || "Investigation timeline could not be loaded.";
+}
+
 async function logout() {
     try { await apiRequest("/auth/logout", { method: "POST" }); } catch (_) {}
     sessionStorage.removeItem(TOKEN_KEY);
@@ -151,6 +190,14 @@ async function initializeAlertDetail() {
 
         const alert = await apiRequest(`/alerts/${encodeURIComponent(alertId)}`);
         renderAlert(alert);
+        try {
+            const investigation = await apiRequest(
+                `/operations/alerts/${encodeURIComponent(alertId)}/investigation`,
+            );
+            renderInvestigation(investigation);
+        } catch (investigationError) {
+            renderInvestigationError(investigationError.message);
+        }
     } catch (error) {
         showError(error.message || "Unable to load alert details.");
     }
