@@ -21,7 +21,7 @@ from basesentinel.api.decorators import require_agent, require_user
 from basesentinel.api.permissions import require_role
 from basesentinel.models import (
     Agent, AgentCredential, AgentInvitation, PairingCode,
-    Asset, AssetAddress, AssetInterface,
+    Asset, AssetAddress, AssetInterface, CorrelatedActivity, CorrelatedActivityEvent,
 )
 from basesentinel.services.credentials import (
     AgentCredentialService,
@@ -515,6 +515,17 @@ def delete_agent(agent_id):
         deleted_alerts = db.session.execute(
             delete(Alert).where(Alert.agent_id == parsed_id)
         ).rowcount or 0
+        activity_ids = select(CorrelatedActivity.id).where(
+            CorrelatedActivity.agent_id == parsed_id
+        )
+        db.session.execute(
+            delete(CorrelatedActivityEvent).where(
+                CorrelatedActivityEvent.activity_id.in_(activity_ids)
+            )
+        )
+        db.session.execute(
+            delete(CorrelatedActivity).where(CorrelatedActivity.agent_id == parsed_id)
+        )
         deleted_events = db.session.execute(
             delete(SecurityEvent).where(SecurityEvent.agent_id == parsed_id)
         ).rowcount or 0
@@ -1013,6 +1024,78 @@ def list_security_events():
 
     response.headers["Cache-Control"] = "no-store"
 
+    return response, 200
+
+
+@api.get("/activities")
+@require_user
+def list_correlated_activities():
+    pagination = _parse_pagination()
+    if pagination is None:
+        return _error_response(
+            "invalid_pagination",
+            "Limit must be between 1 and 100 and offset cannot be negative.",
+            400,
+        )
+    limit, offset = pagination
+    total = db.session.scalar(select(func.count()).select_from(CorrelatedActivity))
+    activities = db.session.scalars(
+        select(CorrelatedActivity)
+        .options(selectinload(CorrelatedActivity.agent).selectinload(Agent.asset))
+        .order_by(CorrelatedActivity.last_seen_at.desc(), CorrelatedActivity.id.desc())
+        .limit(limit)
+        .offset(offset)
+    ).all()
+    response = jsonify({
+        "items": [
+            {
+                "id": str(item.id),
+                "activity_type": item.activity_type,
+                "title": item.title,
+                "summary": item.summary,
+                "occurrence_count": item.occurrence_count,
+                "first_seen_at": _serialize_datetime(item.first_seen_at),
+                "last_seen_at": _serialize_datetime(item.last_seen_at),
+                "context": item.context,
+                "agent": _agent_context_payload(item.agent),
+            }
+            for item in activities
+        ],
+        "pagination": {"limit": limit, "offset": offset, "total": total},
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response, 200
+
+
+@api.get("/activities/<activity_id>")
+@require_user
+def get_correlated_activity(activity_id):
+    parsed_id = _parse_uuid(activity_id)
+    if parsed_id is None:
+        return _error_response("invalid_activity_id", "Invalid activity ID.", 400)
+    activity = db.session.scalar(
+        select(CorrelatedActivity)
+        .options(
+            selectinload(CorrelatedActivity.agent).selectinload(Agent.asset),
+            selectinload(CorrelatedActivity.source_events).selectinload(SecurityEvent.agent).selectinload(Agent.asset),
+        )
+        .where(CorrelatedActivity.id == parsed_id)
+    )
+    if activity is None:
+        return _error_response("activity_not_found", "Correlated activity not found.", 404)
+    response = jsonify({
+        "id": str(activity.id),
+        "activity_type": activity.activity_type,
+        "title": activity.title,
+        "summary": activity.summary,
+        "occurrence_count": activity.occurrence_count,
+        "first_seen_at": _serialize_datetime(activity.first_seen_at),
+        "last_seen_at": _serialize_datetime(activity.last_seen_at),
+        "context": activity.context,
+        "agent": _agent_context_payload(activity.agent),
+        "source_events": [_event_summary_payload(event) for event in activity.source_events],
+    })
+    response.headers["Cache-Control"] = "no-store"
     return response, 200
 
 

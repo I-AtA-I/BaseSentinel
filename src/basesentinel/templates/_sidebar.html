@@ -7,6 +7,7 @@
         <span class="sidebar-label">OPERATIONS</span>
         <a class="nav-link {{ 'active' if request.path == '/' else '' }}" href="/"><span class="nav-icon">◈</span> Overview</a>
         <a class="nav-link {{ 'active' if request.path.startswith('/events') else '' }}" href="/events"><span class="nav-icon">⌁</span> Events</a>
+        <a class="nav-link {{ 'active' if request.path.startswith('/activities') else '' }}" href="/activities"><span class="nav-icon">◎</span> Correlated activity</a>
         <a class="nav-link {{ 'active' if request.path.startswith('/alerts') else '' }}" href="/alerts"><span class="nav-icon">△</span> Alerts</a>
         <a class="nav-link {{ 'active' if request.path.startswith('/reports') else '' }}" href="/reports"><span class="nav-icon">▧</span> Reports</a>
         <a class="nav-link {{ 'active' if request.path.startswith('/agent-health') else '' }}" href="/agent-health"><span class="nav-icon">◉</span> Agent health</a>

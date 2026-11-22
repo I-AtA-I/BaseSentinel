@@ -29,7 +29,7 @@ _ALLOWED_EVENT_FIELDS = {
     "TargetUserName", "SubjectUserName", "IpAddress", "WorkstationName",
     "LogonType", "ProcessName", "TargetDomainName", "SubjectDomainName",
     "Status", "SubStatus", "PrivilegeList",
-    "TargetSid", "MemberName", "MemberSid", "TargetUserSid",
+    "TargetSid", "MemberName", "MemberSid", "TargetUserSid", "SubjectUserSid",
     "ServiceName", "ServiceFileName", "ServiceType", "StartType",
     "SubjectLogonId", "TargetLogonId", "DeviceId", "DeviceInstanceId",
     "DeviceDescription", "DeviceName", "ClassId", "ClassName",

@@ -333,6 +333,11 @@ class EventIngestionService:
             # This also makes the generated event ID available.
             session.flush()
 
+            # Build correlated activity from the persisted immutable source event.
+            from basesentinel.services.correlation import CorrelationService
+
+            CorrelationService.process_event(event)
+
             # Evaluate detection rules before committing the event.
             # Detection and ingestion share the same database transaction.
             from basesentinel.services.detection import DetectionService
