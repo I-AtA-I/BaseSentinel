@@ -27,7 +27,7 @@ class CorrelationService:
         account_sid = cls._clean(data.get("SubjectUserSid")).casefold()
         account_name = cls._clean(data.get("SubjectUserName")).casefold()
         domain = cls._clean(data.get("SubjectDomainName")).casefold()
-        account_identity = account_sid or f"{domain}\\\\{account_name}".strip("\\\\")
+        account_identity = account_sid or f"{domain}:{account_name}".strip(":")
         logon_id = cls._clean(data.get("SubjectLogonId")).casefold()
         raw_privileges = cls._clean(data.get("PrivilegeList"))
         privileges = sorted(
