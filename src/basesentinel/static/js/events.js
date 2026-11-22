@@ -113,43 +113,6 @@ function applyTheme(theme) {
         selected === "dark" ? "◐" : "◑";
 }
 
-function groupRepeatedPrivilegeEvents(items) {
-    const grouped = [];
-    const windowMs = 5 * 60 * 1000;
-
-    for (const event of items) {
-        if (event.event_code !== "4672" || event.event_type !== "privilege.special_assignment") {
-            grouped.push(event);
-            continue;
-        }
-
-        const occurredAt = Date.parse(event.occurred_at);
-        if (!Number.isFinite(occurredAt)) {
-            grouped.push(event);
-            continue;
-        }
-
-        const signature = [
-            event.agent_id,
-            String(event.message || "").replace(/\s+/g, " ").trim(),
-        ].join("|");
-
-        const matchingGroup = [...grouped].reverse().find((entry) =>
-            Array.isArray(entry.events) &&
-            entry.signature === signature &&
-            Math.abs(occurredAt - entry.anchorTime) <= windowMs
-        );
-
-        if (matchingGroup) {
-            matchingGroup.events.push(event);
-        } else {
-            grouped.push({ signature, anchorTime: occurredAt, events: [event] });
-        }
-    }
-
-    return grouped;
-}
-
 function renderSingleEventRow(event) {
     const id = escapeHtml(event.id);
     const message = String(event.message || "").replace(/\s+/g, " ").trim();
@@ -178,37 +141,6 @@ function renderSingleEventRow(event) {
         </tr>`;
 }
 
-function renderRepeatedEventGroup(events) {
-    const first = events[0];
-    const device = first.device_name || `Device ${String(first.agent_id || "").slice(0, 8)}`;
-    const eventLinks = events.map((event) => `
-        <li>
-            <a href="/events/${encodeURIComponent(event.id)}">Record ${escapeHtml(String(event.id).slice(0, 8))}…</a>
-            <span>${escapeHtml(formatDate(event.occurred_at))}</span>
-        </li>`).join("");
-
-    return `
-        <tr class="event-group-row">
-            <td>
-                <div class="event-list-link">
-                    <strong>Special privileges assigned</strong>
-                    <span>${events.length} matching Windows Security 4672 records within five minutes</span>
-                    <details class="event-group-details">
-                        <summary>View all ${events.length} source events</summary>
-                        <ul>${eventLinks}</ul>
-                    </details>
-                </div>
-            </td>
-            <td><span class="severity-label ${severityClass(first.severity)}">Level ${Number(first.severity)} · ${severityName(first.severity)}</span></td>
-            <td>Authentication</td>
-            <td>
-                <a class="event-device-name" href="/agents/${encodeURIComponent(first.agent_id)}">${escapeHtml(device)}</a>
-                <small class="event-device-id">${escapeHtml(String(first.agent_id || "").slice(0, 8))}…</small>
-            </td>
-            <td>${escapeHtml(formatDate(events[0].received_at))}</td>
-        </tr>`;
-}
-
 function renderEvents() {
     const items = state.items;
     $("count-total").textContent = formatNumber(state.total);
@@ -229,15 +161,7 @@ function renderEvents() {
         $("events-table").innerHTML =
             '<tr><td colspan="5" class="table-empty">No events match this view. Try the Level 0 filter to inspect informational audit records.</td></tr>';
     } else {
-        const displayItems = $("group-repeated-events").checked
-            ? groupRepeatedPrivilegeEvents(items)
-            : items;
-        $("events-table").innerHTML = displayItems.map((item) => {
-            if (Array.isArray(item.events) && item.events.length > 1) {
-                return renderRepeatedEventGroup(item.events);
-            }
-            return renderSingleEventRow(item.events ? item.events[0] : item);
-        }).join("");
+        $("events-table").innerHTML = items.map(renderSingleEventRow).join("");
     }
 
     const first = state.total ? state.offset + 1 : 0;
@@ -416,8 +340,6 @@ async function initializeEvents() {
     $("show-events-view").addEventListener("click", () => showEventsView("events"));
     $("show-timeline-view").addEventListener("click", () => showEventsView("timeline"));
     $("timeline-period").addEventListener("change", () => { if (!$("timeline-view").hidden) loadTimeline(); });
-
-    $("group-repeated-events").addEventListener("change", renderEvents);
 
     $("apply-filters").addEventListener("click", () => {
         state.offset = 0;
