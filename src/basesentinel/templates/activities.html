@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Correlated activity | BaseSentinel</title>
+    <link rel="stylesheet" href="{{ url_for('web.static', filename='css/dashboard.css') }}">
+</head>
+<body>
+<div class="app-shell">
+    {% include "_sidebar.html" %}
+    <main class="main-content">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">SECURITY OPERATIONS / INVESTIGATION</p>
+                <h1>Correlated activity<span style="color:var(--accent)">.</span></h1>
+                <p class="muted">Related source events grouped into durable investigation records.</p>
+            </div>
+            <div class="user-menu">
+                <strong id="current-username">Loading</strong>
+                <small id="current-role">—</small>
+                <button id="logout-button" class="text-button" type="button">Sign out ↗</button>
+            </div>
+        </header>
+        <section class="dashboard-toolbar">
+            <span class="muted">Raw source events remain unchanged and individually accessible.</span>
+            <div class="toolbar-actions">
+                <button id="theme-toggle" class="theme-toggle" type="button">
+                    <span class="theme-symbol">◐</span><span class="theme-label">LIGHT MODE</span>
+                </button>
+                <button id="refresh-button" class="secondary-button" type="button">↻ Refresh</button>
+            </div>
+        </section>
+        <div id="activity-error" class="dashboard-error" role="alert" hidden></div>
+        <section class="metric-grid">
+            <article class="metric-card">
+                <div class="metric-heading"><span>Correlated activities</span></div>
+                <strong id="activity-count" class="metric-value">—</strong>
+                <span class="metric-description">Investigation records</span>
+            </article>
+            <article class="metric-card">
+                <div class="metric-heading"><span>Source events</span></div>
+                <strong id="source-count" class="metric-value">—</strong>
+                <span class="metric-description">Events represented on this page</span>
+            </article>
+        </section>
+        <section class="panel alerts-table-panel">
+            <div class="panel-heading">
+                <div><h2>Activity registry</h2><p class="muted">Select an activity to inspect its correlation context and original events.</p></div>
+                <span class="panel-tag">CORRELATION ENGINE</span>
+            </div>
+            <div class="table-scroll">
+                <table class="events-table">
+                    <thead><tr><th>Activity</th><th>Occurrences</th><th>Device</th><th>First seen</th><th>Last seen</th></tr></thead>
+                    <tbody id="activities-table"><tr><td colspan="5" class="table-empty">Loading activities...</td></tr></tbody>
+                </table>
+            </div>
+        </section>
+        <section id="activity-detail" class="panel event-detail-panel" hidden>
+            <div class="panel-heading">
+                <div><h2 id="detail-title">Activity details</h2><p id="detail-summary" class="muted"></p></div>
+                <button id="close-detail" class="secondary-button" type="button">Close</button>
+            </div>
+            <dl id="activity-context" class="event-detail-list"></dl>
+            <div class="panel-heading"><div><h2>Source events</h2><p class="muted">Original immutable records included in this activity.</p></div></div>
+            <div class="table-scroll">
+                <table class="events-table">
+                    <thead><tr><th>Event</th><th>Event ID</th><th>Occurred</th><th>Received</th></tr></thead>
+                    <tbody id="activity-source-events"></tbody>
+                </table>
+            </div>
+        </section>
+        <footer class="page-footer"><span>BASESENTINEL / LOCAL INSTANCE</span><a href="/">← Back to overview</a></footer>
+    </main>
+</div>
+<script src="{{ url_for('web.static', filename='js/activities.js') }}" defer></script>
+</body>
+</html>
