@@ -248,3 +248,20 @@ def test_agent_health_javascript_is_available(client):
     response = client.get("/static/js/agent-health.js")
     assert response.status_code == 200
     assert b"/operations/agents" in response.data
+def test_detection_rules_page_is_available(client):
+    response = client.get("/detection-rules")
+    assert response.status_code == 200
+    assert b"Custom detection rules" in response.data
+    assert b"/static/js/detection-rules.js" in response.data
+
+
+def test_detection_rules_javascript_is_available(client):
+    response = client.get("/static/js/detection-rules.js")
+    assert response.status_code == 200
+    assert b"initialize" in response.data
+
+
+def test_detection_rules_page_is_in_shared_navigation(client):
+    response = client.get("/detection-rules")
+    assert response.status_code == 200
+    assert b'href="/detection-rules"' in response.data

@@ -28,6 +28,11 @@ def alert_detail(alert_id):
     return render_template("alert_detail.html", alert_id=alert_id)
 
 
+@web.get("/detection-rules")
+def detection_rules():
+    return render_template("detection_rules.html")
+
+
 @web.get("/login")
 def login():
     return render_template("login.html")

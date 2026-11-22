@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 
 from basesentinel import db
-from basesentinel.models import Agent, Alert, SecurityEvent
+from basesentinel.models import Agent, Alert, DetectionRule, SecurityEvent
 from basesentinel.models.base import utcnow_naive
 
 
@@ -128,6 +128,8 @@ class DetectionService:
 
                 if alert is not None:
                     alerts.append(alert)
+
+            alerts.extend(cls._detect_custom_rules(event))
 
             session.flush()
 
@@ -385,3 +387,149 @@ class DetectionService:
         db.session.add(alert)
 
         return alert
+
+
+    @classmethod
+    def _detect_custom_rules(cls, event: SecurityEvent) -> list[Alert]:
+        """Evaluate enabled administrator-defined rules for one event."""
+        rules = db.session.scalars(
+            select(DetectionRule).where(DetectionRule.enabled.is_(True))
+        ).all()
+        created_or_updated = []
+
+        for rule in rules:
+            if rule.category is not None and event.category != rule.category:
+                continue
+            if rule.event_type is not None and event.event_type != rule.event_type:
+                continue
+            if rule.source is not None and event.source.casefold() != rule.source.casefold():
+                continue
+            if rule.event_code is not None and event.event_code != rule.event_code:
+                continue
+            if (
+                rule.min_event_severity is not None
+                and event.severity < rule.min_event_severity
+            ):
+                continue
+            if not cls._matches_custom_conditions(event, rule.conditions):
+                continue
+
+            event_time = event.occurred_at.replace(tzinfo=timezone.utc)
+            timestamp = int(event_time.timestamp())
+            bucket_start = (
+                timestamp // rule.window_seconds
+            ) * rule.window_seconds
+            window_start = datetime.fromtimestamp(
+                bucket_start, tz=timezone.utc
+            ).replace(tzinfo=None)
+            window_end = window_start + timedelta(seconds=rule.window_seconds)
+
+            query = select(SecurityEvent).where(
+                SecurityEvent.agent_id == event.agent_id,
+                SecurityEvent.occurred_at >= window_start,
+                SecurityEvent.occurred_at < window_end,
+            )
+            if rule.category is not None:
+                query = query.where(SecurityEvent.category == rule.category)
+            if rule.event_type is not None:
+                query = query.where(SecurityEvent.event_type == rule.event_type)
+            if rule.source is not None:
+                query = query.where(func.lower(SecurityEvent.source) == rule.source.casefold())
+            if rule.event_code is not None:
+                query = query.where(SecurityEvent.event_code == rule.event_code)
+            if rule.min_event_severity is not None:
+                query = query.where(SecurityEvent.severity >= rule.min_event_severity)
+
+            candidates = db.session.scalars(
+                query.order_by(SecurityEvent.occurred_at.asc(), SecurityEvent.id.asc())
+                .limit(1001)
+            ).all()
+            matches = [
+                candidate for candidate in candidates
+                if cls._matches_custom_conditions(candidate, rule.conditions)
+            ]
+            if len(matches) < rule.threshold:
+                continue
+
+            rule_key = f"custom_{rule.id.hex}"
+            deduplication_key = cls._fingerprint(
+                f"{rule.id}:{event.agent_id}:{bucket_start}"
+            )
+            existing = db.session.scalar(
+                select(Alert)
+                .where(
+                    Alert.rule_key == rule_key,
+                    Alert.deduplication_key == deduplication_key,
+                )
+                .with_for_update()
+            )
+            first_seen = matches[0].occurred_at
+            last_seen = matches[-1].occurred_at
+            now = utcnow_naive()
+
+            if existing is not None:
+                existing.occurrence_count = len(matches)
+                existing.last_seen_at = last_seen
+                existing.source_event_id = event.id
+                existing.updated_at = now
+                if existing.status != "open":
+                    existing.status = "open"
+                    existing.acknowledged_by_user_id = None
+                    existing.acknowledged_at = None
+                    existing.resolved_at = None
+                created_or_updated.append(existing)
+                continue
+
+            criteria = []
+            for field in ("category", "event_type", "source", "event_code"):
+                value = getattr(rule, field)
+                if value is not None:
+                    criteria.append(f"{field}={value}")
+            if rule.min_event_severity is not None:
+                criteria.append(f"severity>={rule.min_event_severity}")
+            if rule.conditions:
+                criteria.append(f"event_data matches {len(rule.conditions)} condition(s)")
+            criteria_text = ", ".join(criteria) if criteria else "all events"
+            description = rule.description.strip()
+            explanation = (
+                f"Custom rule matched {len(matches)} event(s) within "
+                f"{rule.window_seconds} seconds on this agent. "
+                f"Criteria: {criteria_text}."
+            )
+            if description:
+                explanation = f"{description} {explanation}"
+
+            alert = Alert(
+                rule_key=rule_key,
+                title=rule.name,
+                description=explanation[:4000],
+                severity=rule.severity,
+                status="open",
+                agent_id=event.agent_id,
+                source_event_id=event.id,
+                deduplication_key=deduplication_key,
+                occurrence_count=len(matches),
+                first_seen_at=first_seen,
+                last_seen_at=last_seen,
+                created_at=now,
+                updated_at=now,
+            )
+            db.session.add(alert)
+            created_or_updated.append(alert)
+
+        return created_or_updated
+
+    @staticmethod
+    def _matches_custom_conditions(
+        event: SecurityEvent,
+        conditions: dict,
+    ) -> bool:
+        if not conditions:
+            return True
+        event_data = event.event_data
+        if not isinstance(event_data, dict):
+            return False
+        return all(
+            key in event_data and event_data[key] == expected
+            for key, expected in conditions.items()
+        )

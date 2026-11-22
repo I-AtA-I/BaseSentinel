@@ -9,6 +9,7 @@
         <a class="nav-link {{ 'active' if request.path.startswith('/events') else '' }}" href="/events"><span class="nav-icon">⌁</span> Events</a>
         <a class="nav-link {{ 'active' if request.path.startswith('/alerts') else '' }}" href="/alerts"><span class="nav-icon">△</span> Alerts</a>
         <a class="nav-link {{ 'active' if request.path.startswith('/agent-health') else '' }}" href="/agent-health"><span class="nav-icon">◉</span> Agent health</a>
+        <a class="nav-link {{ 'active' if request.path.startswith('/detection-rules') else '' }}" href="/detection-rules"><span class="nav-icon">⚑</span> Detection rules</a>
         <a class="nav-link {{ 'active' if request.path.startswith('/agents') else '' }}" href="/agents"><span class="nav-icon">▦</span> Clients</a>
         <a class="nav-link {{ 'active' if request.path.startswith('/settings/enrollment') else '' }}" href="/settings/enrollment"><span class="nav-icon">⚙</span> Agent enrollment</a>
     </div>
