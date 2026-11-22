@@ -227,6 +227,35 @@ def test_console_python_executable_keeps_active_venv_interpreter(
     assert background.console_python_executable() == str(venv_python)
 
 
+def test_windowless_python_executable_uses_venv_pythonw(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    venv_python = tmp_path / "venv" / "Scripts" / "python.exe"
+    venv_pythonw = venv_python.with_name("pythonw.exe")
+    venv_python.parent.mkdir(parents=True)
+    venv_python.touch()
+    venv_pythonw.touch()
+
+    monkeypatch.setattr(background, "os", SimpleNamespace(name="nt"))
+
+    assert background.windowless_python_executable(str(venv_python)) == str(venv_pythonw)
+
+
+def test_windowless_python_executable_falls_back_when_pythonw_missing(
+    monkeypatch,
+    tmp_path,
+):
+    from types import SimpleNamespace
+
+    venv_python = tmp_path / "venv" / "Scripts" / "python.exe"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.touch()
+
+    monkeypatch.setattr(background, "os", SimpleNamespace(name="nt"))
+
+    assert background.windowless_python_executable(str(venv_python)) == str(venv_python)
+
+
 def test_windowed_gui_entrypoint_is_registered_and_module_compiles():
     import tomllib
     from pathlib import Path
