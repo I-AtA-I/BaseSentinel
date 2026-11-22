@@ -85,7 +85,7 @@ def _release_windows_file_lock(lock: _WindowsFileLock) -> None:
         wintypes.DWORD,
         wintypes.DWORD,
         wintypes.DWORD,
-        ctypes.c_void_p,
+        ctypes.POINTER(type(lock.overlapped)),
     ]
     unlock_file_ex.restype = wintypes.BOOL
     import msvcrt
@@ -139,7 +139,7 @@ def _try_acquire_file_lock(
     data_dir: Path | None = None,
     *,
     shared: bool,
-) -> BinaryIO | None:
+) -> BinaryIO | _WindowsFileLock | None:
     """Acquire a shared status lock or an exclusive worker lock without waiting."""
     paths = _paths(data_dir)
     paths["root"].mkdir(parents=True, exist_ok=True)
@@ -166,12 +166,16 @@ def _try_acquire_file_lock(
     return handle
 
 
-def try_acquire_worker_lock(data_dir: Path | None = None) -> BinaryIO | None:
+def try_acquire_worker_lock(
+    data_dir: Path | None = None,
+) -> BinaryIO | _WindowsFileLock | None:
     """Acquire the exclusive single-instance lock for the background worker."""
     return _try_acquire_file_lock(data_dir, shared=False)
 
 
-def _try_acquire_status_lock(data_dir: Path | None = None) -> BinaryIO | None:
+def _try_acquire_status_lock(
+    data_dir: Path | None = None,
+) -> BinaryIO | _WindowsFileLock | None:
     """Acquire a shared lock so concurrent status checks do not block one another."""
     return _try_acquire_file_lock(data_dir, shared=True)
 
