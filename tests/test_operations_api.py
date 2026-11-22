@@ -197,6 +197,7 @@ def test_security_report_summary_includes_event_and_agent_aggregates(client, app
     assert payload["events"]["total"] == 1
     assert payload["events"]["by_severity"]["8"] == 1
     assert payload["events"]["by_category"]["system"] == 1
+    assert payload["active_agent_count"] == 1
     assert payload["agent_activity"][0]["hostname"] == "operations-test"
     assert payload["agent_activity"][0]["event_count"] == 1
 
