@@ -207,6 +207,20 @@ def test_console_python_executable_prefers_python_exe_for_pythonw(monkeypatch, t
     assert background.console_python_executable(str(pythonw)) == str(python)
 
 
+def test_console_python_executable_uses_base_interpreter_in_venv(
+    monkeypatch,
+    tmp_path,
+):
+    from types import SimpleNamespace
+
+    base_python = tmp_path / "python.exe"
+    base_python.touch()
+    monkeypatch.setattr(background, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(background.sys, "_base_executable", str(base_python), raising=False)
+
+    assert background.console_python_executable() == str(base_python)
+
+
 def test_windowed_gui_entrypoint_is_registered_and_module_compiles():
     import tomllib
     from pathlib import Path
