@@ -291,6 +291,7 @@ def _collect_security_report(hours: int) -> dict:
             "by_status": alert_status_counts,
             "by_severity": alert_severity_counts,
         },
+        "active_agent_count": len(agent_counts),
         "agent_activity": sorted(
             agent_counts.values(),
             key=lambda item: (-item["event_count"], item["hostname"] or ""),
@@ -384,7 +385,7 @@ def export_security_report_pdf():
             str(report["events"]["total"]),
             str(report["alerts"]["total"]),
             str(report["alerts"]["by_status"]["open"]),
-            str(len(report["agent_activity"])),
+            str(report["active_agent_count"]),
         ],
     ], colWidths=[55 * mm] * 4)
     summary_table.setStyle(TableStyle([
