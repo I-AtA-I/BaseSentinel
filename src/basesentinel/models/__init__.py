@@ -18,6 +18,7 @@ from basesentinel.models.agents import (
 from basesentinel.models.server_settings import ServerSettings
 from basesentinel.models.invitations import AgentInvitation
 from basesentinel.models.enrollment_requests import AgentEnrollmentRequest
+from basesentinel.models.detection_rules import DetectionRule
 
 __all__ = [
     "Asset",
@@ -33,4 +34,5 @@ __all__ = [
     "SecurityEvent",
     "UserSession",
     "Alert",
+    "DetectionRule",
 ]

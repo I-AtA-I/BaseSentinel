@@ -43,6 +43,7 @@ jobs:
           node --check src/basesentinel/static/js/agents.js
           node --check src/basesentinel/static/js/events.js
           node --check src/basesentinel/static/js/event-detail.js
+          node --check src/basesentinel/static/js/detection-rules.js
 
       - name: Run tests
         run: python -m pytest -q tests --ignore=tests/integration
