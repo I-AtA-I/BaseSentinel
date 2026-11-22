@@ -6,7 +6,6 @@ Create Date: 2026-11-22
 """
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import mysql
 
 
 revision = "a8c41d7e9f20"
@@ -80,6 +79,7 @@ def upgrade():
 def downgrade():
     op.drop_index("ix_correlated_activity_events_event", table_name="correlated_activity_events")
     op.drop_table("correlated_activity_events")
-    op.drop_index("ix_correlated_activities_type_key_seen", table_name="correlated_activities")\n    op.drop_index("ix_correlated_activities_last_seen", table_name="correlated_activities")
+    op.drop_index("ix_correlated_activities_type_key_seen", table_name="correlated_activities")
+    op.drop_index("ix_correlated_activities_last_seen", table_name="correlated_activities")
     op.drop_index("ix_correlated_activities_agent_last_seen", table_name="correlated_activities")
     op.drop_table("correlated_activities")
