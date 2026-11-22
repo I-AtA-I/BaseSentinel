@@ -83,7 +83,8 @@ def test_matching_4672_events_create_one_activity_with_both_raw_events(app, agen
     assert {event.id for event in activity.source_events} == {first.id, second.id}
     assert SecurityEvent.query.count() == 2
     assert CorrelatedActivityEvent.query.count() == 2
-    assert activity.context["account"] == "s-1-5-18"
+    assert activity.context["account"] == "system"
+    assert activity.context["account_sid"] == "s-1-5-18"
     assert activity.context["logon_id"] == "0x3e7"
 
 
