@@ -677,23 +677,6 @@ tbody tr:last-child td { border-bottom: 0; }
 .event-device-name { font-size: 10px; font-weight: 750; }
 .event-device-id { margin-top: 4px; color: var(--subtle); font-family: Consolas, "Courier New", monospace; font-size: 8px; }
 .event-filters { grid-template-columns: minmax(230px,1.1fr) minmax(180px,1fr) minmax(110px,.55fr) auto; }
-.event-group-toggle {
-    grid-column: 1 / -1;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--muted);
-    font-size: 10px;
-    cursor: pointer;
-}
-.event-group-toggle input { accent-color: var(--accent); }
-.event-group-row { background: var(--surface-2); }
-.event-group-details { margin-top: 8px; color: var(--muted); font-size: 10px; }
-.event-group-details summary { color: var(--accent); cursor: pointer; font-weight: 750; }
-.event-group-details ul { display: grid; gap: 6px; margin: 8px 0 0; padding-left: 17px; }
-.event-group-details li { display: flex; flex-wrap: wrap; gap: 8px; }
-.event-group-details a { color: var(--text); }
-.event-group-details span { color: var(--subtle); }
 .severity-info { color: var(--muted); background: var(--surface-2); border-color: var(--line-strong); }
 
 .event-detail-content { display: grid; gap: 15px; }
