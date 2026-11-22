@@ -131,8 +131,8 @@ function groupRepeatedPrivilegeEvents(items) {
 
         const signature = [
             event.agent_id,
-            String(event.message || "").replace(/\\s+/g, " ").trim(),
-        ].join("\\u0000");
+            String(event.message || "").replace(/\s+/g, " ").trim(),
+        ].join("|");
 
         const matchingGroup = [...grouped].reverse().find((entry) =>
             Array.isArray(entry.events) &&
@@ -152,12 +152,12 @@ function groupRepeatedPrivilegeEvents(items) {
 
 function renderSingleEventRow(event) {
     const id = escapeHtml(event.id);
-    const message = String(event.message || "").replace(/\\s+/g, " ").trim();
+    const message = String(event.message || "").replace(/\s+/g, " ").trim();
     const preview = message.length > 150 ? `${message.slice(0, 147)}…` : message;
     const device = event.device_name || `Device ${String(event.agent_id || "").slice(0, 8)}`;
     const category = String(event.category || "unknown")
         .replace(/[_-]+/g, " ")
-        .replace(/\\b\\w/g, (letter) => letter.toUpperCase());
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
     return `
         <tr>
