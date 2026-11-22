@@ -204,16 +204,10 @@ class DetectionService:
         _, _, bucket_start = cls._malware_window(event.occurred_at)
         window_seconds = int(cls.MALWARE_CORRELATION_WINDOW.total_seconds())
         event_time = event.occurred_at
-        candidate_keys = [
-            cls._fingerprint(
-                f"{event.agent_id}:microsoft-defender:{threat}:{path}:{bucket}"
-            )
-            for bucket in (
-                bucket_start - window_seconds,
-                bucket_start,
-                bucket_start + window_seconds,
-            )
-        ]
+        identity_key = cls._fingerprint(
+            f"{event.agent_id}:microsoft-defender:{threat}:{path}"
+        )[:48]
+        current_deduplication_key = f"{identity_key}{bucket_start:016x}"
         correlation_start = event_time - cls.MALWARE_CORRELATION_WINDOW
         correlation_end = event_time + cls.MALWARE_CORRELATION_WINDOW
 
@@ -221,7 +215,7 @@ class DetectionService:
             select(Alert)
             .where(
                 Alert.rule_key == cls.MALWARE_INCIDENT_RULE,
-                Alert.deduplication_key.in_(candidate_keys),
+                Alert.deduplication_key.like(f"{identity_key}%"),
                 Alert.last_seen_at >= correlation_start,
                 Alert.last_seen_at <= correlation_end,
             )
@@ -231,7 +225,7 @@ class DetectionService:
         deduplication_key = (
             existing.deduplication_key
             if existing is not None
-            else candidate_keys[1]
+            else current_deduplication_key
         )
 
         matching_start = (
