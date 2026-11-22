@@ -11,6 +11,98 @@ from typing import BinaryIO
 from basesentinel_agent.storage import default_data_dir
 
 
+class _WindowsFileLock:
+    """Keep the file handle and OVERLAPPED structure alive for a Win32 lock."""
+
+    def __init__(self, handle: BinaryIO, kernel32, overlapped) -> None:
+        self.handle = handle
+        self.kernel32 = kernel32
+        self.overlapped = overlapped
+
+
+def _try_acquire_windows_file_lock(
+    handle: BinaryIO,
+    *,
+    shared: bool,
+) -> _WindowsFileLock | None:
+    """Use LockFileEx so status readers can share a lock on Windows."""
+    import ctypes
+    from ctypes import wintypes
+
+    class OVERLAPPED(ctypes.Structure):
+        _fields_ = [
+            ("Internal", ctypes.c_void_p),
+            ("InternalHigh", ctypes.c_void_p),
+            ("Offset", wintypes.DWORD),
+            ("OffsetHigh", wintypes.DWORD),
+            ("hEvent", wintypes.HANDLE),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    lock_file_ex = kernel32.LockFileEx
+    lock_file_ex.argtypes = [
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.POINTER(OVERLAPPED),
+    ]
+    lock_file_ex.restype = wintypes.BOOL
+
+    import msvcrt
+
+    overlapped = OVERLAPPED()
+    flags = 0x00000001  # LOCKFILE_FAIL_IMMEDIATELY
+    if not shared:
+        flags |= 0x00000002  # LOCKFILE_EXCLUSIVE_LOCK
+
+    succeeded = lock_file_ex(
+        msvcrt.get_osfhandle(handle.fileno()),
+        flags,
+        0,
+        1,
+        0,
+        ctypes.byref(overlapped),
+    )
+    if not succeeded:
+        error = ctypes.get_last_error()
+        handle.close()
+        if error == 33:  # ERROR_LOCK_VIOLATION
+            return None
+        raise OSError(error, ctypes.FormatError(error))
+
+    return _WindowsFileLock(handle, kernel32, overlapped)
+
+
+def _release_windows_file_lock(lock: _WindowsFileLock) -> None:
+    import ctypes
+    from ctypes import wintypes
+
+    unlock_file_ex = lock.kernel32.UnlockFileEx
+    unlock_file_ex.argtypes = [
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.POINTER(type(lock.overlapped)),
+    ]
+    unlock_file_ex.restype = wintypes.BOOL
+    import msvcrt
+
+    succeeded = unlock_file_ex(
+        msvcrt.get_osfhandle(lock.handle.fileno()),
+        0,
+        1,
+        0,
+        ctypes.byref(lock.overlapped),
+    )
+    if not succeeded:
+        error = ctypes.get_last_error()
+        raise OSError(error, ctypes.FormatError(error))
+    lock.handle.close()
+
+
 _LOCK_NAME = "agent.lock"
 _PID_NAME = "agent.pid"
 _STOP_NAME = "agent.stop"
@@ -47,7 +139,7 @@ def _try_acquire_file_lock(
     data_dir: Path | None = None,
     *,
     shared: bool,
-) -> BinaryIO | None:
+) -> BinaryIO | _WindowsFileLock | None:
     """Acquire a shared status lock or an exclusive worker lock without waiting."""
     paths = _paths(data_dir)
     paths["root"].mkdir(parents=True, exist_ok=True)
@@ -61,15 +153,12 @@ def _try_acquire_file_lock(
 
     try:
         if os.name == "nt":
-            import msvcrt
+            return _try_acquire_windows_file_lock(handle, shared=shared)
 
-            operation = msvcrt.LK_NBRLCK if shared else msvcrt.LK_NBLCK
-            msvcrt.locking(handle.fileno(), operation, 1)
-        else:
-            import fcntl
+        import fcntl
 
-            operation = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
-            fcntl.flock(handle.fileno(), operation | fcntl.LOCK_NB)
+        operation = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
+        fcntl.flock(handle.fileno(), operation | fcntl.LOCK_NB)
     except OSError:
         handle.close()
         return None
@@ -77,28 +166,35 @@ def _try_acquire_file_lock(
     return handle
 
 
-def try_acquire_worker_lock(data_dir: Path | None = None) -> BinaryIO | None:
+def try_acquire_worker_lock(
+    data_dir: Path | None = None,
+) -> BinaryIO | _WindowsFileLock | None:
     """Acquire the exclusive single-instance lock for the background worker."""
     return _try_acquire_file_lock(data_dir, shared=False)
 
 
-def _try_acquire_status_lock(data_dir: Path | None = None) -> BinaryIO | None:
+def _try_acquire_status_lock(
+    data_dir: Path | None = None,
+) -> BinaryIO | _WindowsFileLock | None:
     """Acquire a shared lock so concurrent status checks do not block one another."""
     return _try_acquire_file_lock(data_dir, shared=True)
 
 
-def release_worker_lock(handle: BinaryIO) -> None:
-    """Release a lock returned by try_acquire_worker_lock."""
+def release_worker_lock(handle: BinaryIO | _WindowsFileLock) -> None:
+    """Release a lock returned by try_acquire_worker_lock or a status check."""
+    if isinstance(handle, _WindowsFileLock):
+        try:
+            _release_windows_file_lock(handle)
+        finally:
+            if not handle.handle.closed:
+                handle.handle.close()
+        return
+
     try:
         handle.seek(0)
-        if os.name == "nt":
-            import msvcrt
+        import fcntl
 
-            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-        else:
-            import fcntl
-
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
     finally:
         handle.close()
 

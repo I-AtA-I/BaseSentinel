@@ -250,33 +250,55 @@ def test_windows_lock_modes_use_shared_status_and_exclusive_worker_locks(
     tmp_path,
 ):
     import os as real_os
-    import sys
-    from types import ModuleType, SimpleNamespace
+    from types import SimpleNamespace
 
-    fake_msvcrt = ModuleType("msvcrt")
-    fake_msvcrt.LK_NBRLCK = 4
-    fake_msvcrt.LK_NBLCK = 2
-    fake_msvcrt.LK_UNLCK = 0
-    calls = []
-    fake_msvcrt.locking = lambda _fd, mode, _length: calls.append(mode)
-    monkeypatch.setitem(sys.modules, "msvcrt", fake_msvcrt)
+    held = []
+    requested_modes = []
+
+    def fake_windows_lock(handle, *, shared):
+        requested_modes.append(shared)
+        if any(not existing_shared for existing_shared, _ in held):
+            handle.close()
+            return None
+        if not shared and held:
+            handle.close()
+            return None
+        held.append((shared, handle))
+        return handle
+
+    def fake_release(handle):
+        held[:] = [(shared, current) for shared, current in held if current is not handle]
+        handle.close()
+
     monkeypatch.setattr(
         background,
         "os",
         SimpleNamespace(name="nt", SEEK_END=real_os.SEEK_END),
     )
+    monkeypatch.setattr(background, "_try_acquire_windows_file_lock", fake_windows_lock)
+    monkeypatch.setattr(background, "release_worker_lock", fake_release)
 
-    reader = background._try_acquire_status_lock(tmp_path)
-    assert reader is not None
-    background.release_worker_lock(reader)
-    assert calls == [fake_msvcrt.LK_NBRLCK, fake_msvcrt.LK_UNLCK]
+    first_reader = background._try_acquire_status_lock(tmp_path)
+    second_reader = background._try_acquire_status_lock(tmp_path)
+    assert first_reader is not None
+    assert second_reader is not None
 
-    calls.clear()
+    # A third status check must not mistake the other readers for a worker.
+    status_probe = background._try_acquire_status_lock(tmp_path)
+    assert status_probe is not None
+    fake_release(status_probe)
+
+    # The exclusive worker lock must still conflict with all status readers.
+    assert background.try_acquire_worker_lock(tmp_path) is None
+    fake_release(first_reader)
+    fake_release(second_reader)
+
     worker = background.try_acquire_worker_lock(tmp_path)
     assert worker is not None
-    background.release_worker_lock(worker)
-    assert calls == [fake_msvcrt.LK_NBLCK, fake_msvcrt.LK_UNLCK]
+    assert background._try_acquire_status_lock(tmp_path) is None
+    fake_release(worker)
 
+    assert requested_modes == [True, True, True, False, False, True, False]
 
 def test_event_workspace_sidebar_items_are_interactive():
     from pathlib import Path

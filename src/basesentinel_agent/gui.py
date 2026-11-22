@@ -1424,17 +1424,15 @@ class AgentWindow:
             elif kind == "control_result":
                 action, code, output, error = payload
                 self.control_busy = False
-                if output:
-                    for line in output.splitlines():
-                        self._append_activity(line, "success" if code == 0 else "error")
-                if error:
-                    self._append_activity(error, "error")
                 if action == "start" and code == 0:
-                    self._append_activity(
-                        "Background monitoring is now independent of this GUI.",
-                        "success",
-                    )
-                elif action == "stop" and code == 0:
+                    self._append_activity("Agent started successfully.", "success")
+                else:
+                    if output:
+                        for line in output.splitlines():
+                            self._append_activity(line, "success" if code == 0 else "error")
+                    if error:
+                        self._append_activity(error, "error")
+                if action == "stop" and code == 0:
                     self._append_activity("Background worker stopped cleanly.", "success")
                 elif code != 0:
                     messagebox.showerror(
