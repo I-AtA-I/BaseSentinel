@@ -35,7 +35,7 @@ class CorrelatedActivity(db.Model):
     )
 
     __table_args__ = (
-        UniqueConstraint("activity_type", "correlation_key", name="uq_correlated_activities_type_key"),
+        Index("ix_correlated_activities_type_key_seen", "activity_type", "correlation_key", "last_seen_at"),
         Index("ix_correlated_activities_agent_last_seen", "agent_id", "last_seen_at"),
         Index("ix_correlated_activities_last_seen", "last_seen_at"),
     )
