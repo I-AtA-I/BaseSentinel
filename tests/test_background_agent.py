@@ -338,6 +338,10 @@ def test_start_worker_accepts_windows_venv_redirector_child(
         held.append(handle)
         return handle
 
+    def fake_release(handle):
+        held.remove(handle)
+        handle.close()
+
     class FakeProcess:
         pid = 27412
 
@@ -357,6 +361,7 @@ def test_start_worker_accepts_windows_venv_redirector_child(
         SimpleNamespace(name="nt", SEEK_END=real_os.SEEK_END),
     )
     monkeypatch.setattr(background, "_try_acquire_windows_file_lock", fake_windows_lock)
+    monkeypatch.setattr(background, "release_worker_lock", fake_release)
     monkeypatch.setattr(
         background,
         "_is_windows_process_descendant",
@@ -391,6 +396,10 @@ def test_start_worker_rejects_unrelated_windows_worker_pid(
         held.append(handle)
         return handle
 
+    def fake_release(handle):
+        held.remove(handle)
+        handle.close()
+
     class FakeProcess:
         pid = 27412
 
@@ -410,6 +419,7 @@ def test_start_worker_rejects_unrelated_windows_worker_pid(
         SimpleNamespace(name="nt", SEEK_END=real_os.SEEK_END),
     )
     monkeypatch.setattr(background, "_try_acquire_windows_file_lock", fake_windows_lock)
+    monkeypatch.setattr(background, "release_worker_lock", fake_release)
     monkeypatch.setattr(
         background,
         "_is_windows_process_descendant",
