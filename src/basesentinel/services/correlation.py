@@ -24,20 +24,22 @@ class CorrelationService:
     @classmethod
     def _privilege_identity(cls, event):
         data = event.event_data if isinstance(event.event_data, dict) else {}
-        account = cls._clean(
-            data.get("SubjectUserSid") or data.get("SubjectUserName")
-        ).casefold()
+        account_sid = cls._clean(data.get("SubjectUserSid")).casefold()
+        account_name = cls._clean(data.get("SubjectUserName")).casefold()
         domain = cls._clean(data.get("SubjectDomainName")).casefold()
+        account_identity = account_sid or f"{domain}\\\\{account_name}".strip("\\\\")
         logon_id = cls._clean(data.get("SubjectLogonId")).casefold()
         raw_privileges = cls._clean(data.get("PrivilegeList"))
         privileges = sorted(
             item.casefold() for item in raw_privileges.split() if item
         )
-        if not account or not logon_id or not privileges:
+        if not account_identity or not logon_id or not privileges:
             return None
         identity = {
             "agent_id": str(event.agent_id),
-            "account": account,
+            "account_identity": account_identity,
+            "account_name": account_name,
+            "account_sid": account_sid,
             "domain": domain,
             "logon_id": logon_id,
             "privileges": privileges,
@@ -62,7 +64,8 @@ class CorrelationService:
             key_material = f"{event.agent_id}:4672:{identity_key}"
             context = {
                 "correlation_quality": "structured",
-                "account": identity["account"],
+                "account": identity["account_name"] or identity["account_sid"],
+                "account_sid": identity["account_sid"],
                 "domain": identity["domain"],
                 "logon_id": identity["logon_id"],
                 "privileges": identity["privileges"],
@@ -79,6 +82,7 @@ class CorrelationService:
                 CorrelatedActivity.last_seen_at >= start,
                 CorrelatedActivity.last_seen_at <= end,
             )
+            .order_by(CorrelatedActivity.last_seen_at.desc())
             .with_for_update()
         )
 
