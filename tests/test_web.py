@@ -97,6 +97,29 @@ def test_alerts_page_is_available(client):
     assert b"/static/js/alerts.js" in response.data
 
 
+def test_alert_detail_page_is_available(client):
+    alert_id = "12345678-1234-1234-1234-123456789abc"
+    response = client.get(f"/alerts/{alert_id}")
+
+    assert response.status_code == 200
+    assert b"ALERT DETAILS" in response.data
+    assert b'data-alert-id="12345678-1234-1234-1234-123456789abc"' in response.data
+    assert b"/static/js/alert-detail.js" in response.data
+
+
+def test_alert_detail_javascript_is_available(client):
+    response = client.get("/static/js/alert-detail.js")
+
+    assert response.status_code == 200
+    assert b"initializeAlertDetail" in response.data
+
+
+def test_alerts_page_links_detection_titles_to_detail(client):
+    response = client.get("/static/js/alerts.js")
+    assert response.status_code == 200
+    assert b'href="/alerts/${encodeURIComponent(alert.id)}"' in response.data
+
+
 def test_alerts_page_references_shared_stylesheet(client):
     response = client.get("/alerts")
 
