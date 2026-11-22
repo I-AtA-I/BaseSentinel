@@ -318,3 +318,29 @@ def test_event_workspace_sidebar_items_are_interactive():
     assert "ttk.Treeview(" in source
     assert "command=self.drain_backlog" in source
     assert source.count("self._build_activity_card(body)") == 1
+
+
+def test_windows_lock_api_errors_are_not_reported_as_worker_contention(
+    monkeypatch,
+    tmp_path,
+):
+    import os as real_os
+    from types import SimpleNamespace
+
+    def fail_windows_lock(handle, *, shared):
+        handle.close()
+        raise OSError(5, "Access is denied")
+
+    monkeypatch.setattr(
+        background,
+        "os",
+        SimpleNamespace(name="nt", SEEK_END=real_os.SEEK_END),
+    )
+    monkeypatch.setattr(
+        background,
+        "_try_acquire_windows_file_lock",
+        fail_windows_lock,
+    )
+
+    with pytest.raises(OSError, match="Access is denied"):
+        background.background_status(tmp_path)
