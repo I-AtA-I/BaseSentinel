@@ -21,7 +21,7 @@ from basesentinel.api.decorators import require_agent, require_user
 from basesentinel.api.permissions import require_role
 from basesentinel.models import (
     Agent, AgentCredential, AgentInvitation, PairingCode,
-    Asset, AssetAddress, AssetInterface,
+    Asset, AssetAddress, AssetInterface, CorrelatedActivity, CorrelatedActivityEvent,
 )
 from basesentinel.services.credentials import (
     AgentCredentialService,
