@@ -167,3 +167,50 @@ def test_security_csv_rejects_out_of_range_period(client):
     headers = login_admin(client)
     response = client.get("/api/v1/reports/security.csv?hours=721", headers=headers)
     assert response.status_code == 400
+
+
+def test_security_report_summary_includes_event_and_agent_aggregates(client, app):
+    headers = login_admin(client)
+    agent = add_agent()
+    now = utcnow_naive()
+    db.session.add(SecurityEvent(
+        agent_id=agent.id,
+        event_uid=uuid.uuid4(),
+        schema_version=1,
+        category="system",
+        event_type="service.installed",
+        severity=8,
+        source="Windows Security",
+        event_code="7045",
+        message="Example service installed",
+        event_data=None,
+        occurred_at=now,
+        received_at=now,
+    ))
+    db.session.commit()
+
+    response = client.get("/api/v1/reports/security/summary?hours=24", headers=headers)
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["events"]["total"] == 1
+    assert payload["events"]["by_severity"]["8"] == 1
+    assert payload["events"]["by_category"]["system"] == 1
+    assert payload["active_agent_count"] == 1
+    assert payload["agent_activity"][0]["hostname"] == "operations-test"
+    assert payload["agent_activity"][0]["event_count"] == 1
+
+
+def test_security_pdf_report_is_downloadable(client, app):
+    headers = login_admin(client)
+    response = client.get("/api/v1/reports/security.pdf?hours=24", headers=headers)
+    assert response.status_code == 200
+    assert response.mimetype == "application/pdf"
+    assert response.data.startswith(b"%PDF")
+    assert "attachment;" in response.headers["Content-Disposition"]
+
+
+def test_security_report_summary_rejects_invalid_period(client):
+    headers = login_admin(client)
+    response = client.get("/api/v1/reports/security/summary?hours=721", headers=headers)
+    assert response.status_code == 400
