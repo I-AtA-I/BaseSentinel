@@ -344,3 +344,118 @@ def test_windows_lock_api_errors_are_not_reported_as_worker_contention(
 
     with pytest.raises(OSError, match="Access is denied"):
         background.background_status(tmp_path)
+
+
+
+def test_start_worker_accepts_windows_venv_redirector_child(
+    monkeypatch,
+    tmp_path,
+):
+    from types import SimpleNamespace
+
+    import os as real_os
+
+    held = []
+
+    def fake_windows_lock(handle, *, shared):
+        if held:
+            handle.close()
+            return None
+        held.append(handle)
+        return handle
+
+    def fake_release(handle):
+        held.remove(handle)
+        handle.close()
+
+    class FakeProcess:
+        pid = 27412
+
+        @staticmethod
+        def poll():
+            return None
+
+    def fake_popen(_command, **_kwargs):
+        lock = background.try_acquire_worker_lock(tmp_path)
+        assert lock is not None
+        (tmp_path / "agent.pid").write_text("28872", encoding="ascii")
+        return FakeProcess()
+
+    monkeypatch.setattr(
+        background,
+        "os",
+        SimpleNamespace(name="nt", SEEK_END=real_os.SEEK_END),
+    )
+    monkeypatch.setattr(background, "_try_acquire_windows_file_lock", fake_windows_lock)
+    monkeypatch.setattr(background, "release_worker_lock", fake_release)
+    monkeypatch.setattr(
+        background,
+        "_is_windows_process_descendant",
+        lambda ancestor_pid, process_pid: (
+            ancestor_pid == 27412 and process_pid == 28872
+        ),
+    )
+    monkeypatch.setattr(background.subprocess, "Popen", fake_popen)
+
+    try:
+        pid = background.start_background_worker(data_dir=tmp_path)
+        assert pid == 28872
+    finally:
+        if held:
+            held.pop().close()
+
+
+def test_start_worker_rejects_unrelated_windows_worker_pid(
+    monkeypatch,
+    tmp_path,
+):
+    from types import SimpleNamespace
+
+    import os as real_os
+
+    held = []
+
+    def fake_windows_lock(handle, *, shared):
+        if held:
+            handle.close()
+            return None
+        held.append(handle)
+        return handle
+
+    def fake_release(handle):
+        held.remove(handle)
+        handle.close()
+
+    class FakeProcess:
+        pid = 27412
+
+        @staticmethod
+        def poll():
+            return None
+
+    def fake_popen(_command, **_kwargs):
+        lock = background.try_acquire_worker_lock(tmp_path)
+        assert lock is not None
+        (tmp_path / "agent.pid").write_text("99999", encoding="ascii")
+        return FakeProcess()
+
+    monkeypatch.setattr(
+        background,
+        "os",
+        SimpleNamespace(name="nt", SEEK_END=real_os.SEEK_END),
+    )
+    monkeypatch.setattr(background, "_try_acquire_windows_file_lock", fake_windows_lock)
+    monkeypatch.setattr(background, "release_worker_lock", fake_release)
+    monkeypatch.setattr(
+        background,
+        "_is_windows_process_descendant",
+        lambda _ancestor_pid, _process_pid: False,
+    )
+    monkeypatch.setattr(background.subprocess, "Popen", fake_popen)
+
+    try:
+        with pytest.raises(RuntimeError, match="started at the same time"):
+            background.start_background_worker(data_dir=tmp_path)
+    finally:
+        if held:
+            held.pop().close()

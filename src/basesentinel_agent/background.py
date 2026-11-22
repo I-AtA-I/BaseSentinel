@@ -109,6 +109,74 @@ _STOP_NAME = "agent.stop"
 _LOG_NAME = "agent.log"
 
 
+
+
+def _is_windows_process_descendant(ancestor_pid: int, process_pid: int) -> bool:
+    """Return whether process_pid is a descendant of ancestor_pid on Windows."""
+    import ctypes
+    from ctypes import wintypes
+
+    class PROCESSENTRY32W(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("cntUsage", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD),
+            ("th32DefaultHeapID", ctypes.c_size_t),
+            ("th32ModuleID", wintypes.DWORD),
+            ("cntThreads", wintypes.DWORD),
+            ("th32ParentProcessID", wintypes.DWORD),
+            ("pcPriClassBase", wintypes.LONG),
+            ("dwFlags", wintypes.DWORD),
+            ("szExeFile", wintypes.WCHAR * 260),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    snapshot_processes = kernel32.CreateToolhelp32Snapshot
+    snapshot_processes.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    snapshot_processes.restype = wintypes.HANDLE
+    process_first = kernel32.Process32FirstW
+    process_first.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+    process_first.restype = wintypes.BOOL
+    process_next = kernel32.Process32NextW
+    process_next.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+    process_next.restype = wintypes.BOOL
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = [wintypes.HANDLE]
+    close_handle.restype = wintypes.BOOL
+
+    snapshot = snapshot_processes(0x00000002, 0)  # TH32CS_SNAPPROCESS
+    invalid_handle = ctypes.c_void_p(-1).value
+    if not snapshot or snapshot == invalid_handle:
+        error = ctypes.get_last_error()
+        raise OSError(error, ctypes.FormatError(error))
+
+    parents: dict[int, int] = {}
+    try:
+        entry = PROCESSENTRY32W()
+        entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+        if not process_first(snapshot, ctypes.byref(entry)):
+            error = ctypes.get_last_error()
+            raise OSError(error, ctypes.FormatError(error))
+        while True:
+            parents[int(entry.th32ProcessID)] = int(entry.th32ParentProcessID)
+            if not process_next(snapshot, ctypes.byref(entry)):
+                break
+    finally:
+        close_handle(snapshot)
+
+    current_pid = process_pid
+    visited: set[int] = set()
+    while current_pid not in visited:
+        visited.add(current_pid)
+        parent_pid = parents.get(current_pid)
+        if not parent_pid:
+            return False
+        if parent_pid == ancestor_pid:
+            return True
+        current_pid = parent_pid
+    return False
+
+
 def _paths(data_dir: Path | None = None) -> dict[str, Path]:
     root = data_dir or default_data_dir()
     return {
@@ -299,6 +367,13 @@ def start_background_worker(
             if state["pid"] == process.pid:
                 return process.pid
             if state["pid"] is not None:
+                if (
+                    os.name == "nt"
+                    and _is_windows_process_descendant(process.pid, state["pid"])
+                ):
+                    # Python's Windows venv launcher is a redirector process.
+                    # The actual interpreter (and worker PID) is its child.
+                    return state["pid"]
                 raise RuntimeError(
                     "Another BaseSentinel background agent started at the same time."
                 )
