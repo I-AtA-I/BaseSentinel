@@ -202,7 +202,6 @@ class DetectionService:
     def _detect_malware_incident(cls, event: SecurityEvent) -> Alert:
         threat, path = cls._malware_identity(event)
         _, _, bucket_start = cls._malware_window(event.occurred_at)
-        window_seconds = int(cls.MALWARE_CORRELATION_WINDOW.total_seconds())
         event_time = event.occurred_at
         identity_key = cls._fingerprint(
             f"{event.agent_id}:microsoft-defender:{threat}:{path}"
