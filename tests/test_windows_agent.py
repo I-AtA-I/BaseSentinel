@@ -51,6 +51,30 @@ def test_event_data_parser_extracts_named_fields():
     }
 
 
+def test_event_data_parser_keeps_defender_incident_identity_fields():
+    xml = """<Event><EventData>
+        <Data Name="Threat Name">Trojan:Win32/Test</Data>
+        <Data Name="ID">2147925201</Data>
+        <Data Name="Path">file:_C:\\sample.exe</Data>
+        <Data Name="Process Name">C:\\Windows\\RuntimeBroker.exe</Data>
+        <Data Name="Action">Quarantine</Data>
+        <Data Name="Action Status">Success</Data>
+    </EventData></Event>"""
+    parsed = _event_data(xml)
+
+    assert parsed["Threat Name"] == "Trojan:Win32/Test"
+    assert parsed["ID"] == "2147925201"
+    assert parsed["Path"] == "file:_C:\\sample.exe"
+    assert parsed["Action"] == "Quarantine"
+
+
+def test_defender_powershell_collector_forces_utf8_output():
+    from basesentinel_agent import windows_eventlog
+
+    assert "[Console]::OutputEncoding" in windows_eventlog._DEFENDER_POWERSHELL
+    assert "$OutputEncoding = [Console]::OutputEncoding" in windows_eventlog._DEFENDER_POWERSHELL
+
+
 def test_security_event_collector_normalizes_windows_events(monkeypatch):
     import subprocess
     from basesentinel_agent import windows_eventlog
