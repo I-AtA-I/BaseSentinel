@@ -491,6 +491,56 @@ def test_windows_event_map_uses_only_server_supported_categories():
     assert _EVENT_MAP[1102][0] == "audit"
 
 
+def test_defender_collector_maps_malware_detection(monkeypatch):
+    import json
+    import subprocess
+    from basesentinel_agent import windows_eventlog
+
+    output = {
+        "LatestRecordId": 900,
+        "Events": [{
+            "Id": 1116,
+            "RecordId": 899,
+            "TimeCreated": "2026-11-22T09:00:00Z",
+            "MachineName": "WORKSTATION",
+            "Message": "Microsoft Defender detected malware.",
+            "Xml": (
+                "<Event><EventData>"
+                '<Data Name="Threat Name">Test.Malware</Data>'
+                '<Data Name="Path">C:\\\\Temp\\\\sample.exe</Data>'
+                "</EventData></Event>"
+            ),
+        }],
+    }
+    captured = {}
+
+    def fake_run(args, **kwargs):
+        captured["script"] = args[-1]
+        return subprocess.CompletedProcess(args, 0, json.dumps(output), "")
+
+    monkeypatch.setattr(windows_eventlog.subprocess, "run", fake_run)
+    events, checkpoint = windows_eventlog.collect_defender_events(800)
+
+    assert "$checkpoint = 800" in captured["script"]
+    assert "EventID=1116" in captured["script"]
+    assert checkpoint == 900
+    assert len(events) == 1
+    assert events[0]["category"] == "application"
+    assert events[0]["event_type"] == "malware.detected"
+    assert events[0]["severity"] == 10
+    assert events[0]["source"] == "Microsoft Defender"
+    assert events[0]["event_data"]["Threat Name"] == "Test.Malware"
+
+
+def test_event_queue_keeps_independent_security_and_defender_checkpoints(tmp_path):
+    queue = EventQueue(tmp_path / "events.sqlite3")
+    queue.add_batch_and_checkpoint([], 100, channel="security")
+    queue.add_batch_and_checkpoint([], 250, channel="defender")
+
+    assert queue.security_checkpoint() == 100
+    assert queue.defender_checkpoint() == 250
+
+
 def test_auditpol_success_setting_detection():
     from basesentinel_agent.windows_eventlog import _auditpol_success_enabled
 
