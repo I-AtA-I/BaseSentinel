@@ -532,7 +532,13 @@ def install_startup(args) -> int:
             str(args.batch_size),
         ]
         print("Administrator approval is required to install the all-users collector.")
-        print("Windows will display a UAC prompt. Review it and approve BaseSentinel to continue.")
+        print("The elevated installer will:")
+        print("  - Create the visible 'BaseSentinel Agent' task, running as SYSTEM at Windows boot.")
+        print("  - Copy the Python runtime and BaseSentinel agent code to ProgramData\\BaseSentinel\\Runtime.")
+        print("  - Store the machine-protected credential, event queue and log in ProgramData\\BaseSentinel\\Data.")
+        print("  - Restrict writes to SYSTEM and Administrators; standard users get runtime read/execute only.")
+        print("It will not change audit policy, firewall rules, user accounts or Windows services.")
+        print("Windows will now display a UAC prompt for Administrator approval.")
         run_elevated(command)
     except (RuntimeError, ValueError, OSError) as exc:
         if bootstrap_path is not None:
