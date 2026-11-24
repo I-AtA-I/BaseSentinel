@@ -99,3 +99,42 @@ def test_scheduled_agent_start_logs_launch_errors_without_console_output(
 
     assert result == 1
     assert "Automatic startup failed: worker failed" in (tmp_path / "agent.log").read_text()
+
+
+def test_unprivileged_startup_install_requests_visible_uac_approval(
+    monkeypatch,
+    tmp_path,
+):
+    from basesentinel_agent import system_install
+
+    bootstrap = tmp_path / "bootstrap.json"
+    bootstrap.write_text("temporary", encoding="utf-8")
+    captured = {}
+
+    monkeypatch.setattr(
+        cli.AgentConfigStore,
+        "load",
+        lambda self: {
+            "server_url": "https://siem.example.com",
+            "agent_id": "agent-123",
+            "token": "token",
+        },
+    )
+    monkeypatch.setattr(cli, "background_status", lambda: {"running": False, "pid": None})
+    monkeypatch.setattr(cli, "is_admin", lambda: False)
+    monkeypatch.setattr(system_install, "create_admin_bootstrap", lambda config: bootstrap)
+    monkeypatch.setattr(cli, "run_elevated", lambda command: captured.update(command=command))
+
+    result = cli.install_startup(Namespace(interval=45.0, batch_size=300))
+
+    assert result == 0
+    assert captured["command"][0] == cli.sys.executable
+    assert "startup-install-admin" in captured["command"]
+    assert "--bootstrap-file" in captured["command"]
+    assert str(bootstrap) in captured["command"]
+    assert "--interval" in captured["command"]
+    assert "45.0" in captured["command"]
+    assert "--batch-size" in captured["command"]
+    assert "300" in captured["command"]
+    assert bootstrap.exists()
+    bootstrap.unlink()
