@@ -49,7 +49,7 @@ def test_server_startup_registers_background_task(monkeypatch, tmp_path):
         "register_boot_task",
         lambda name, command, **kwargs: captured.append((name, command, kwargs)),
     )
-    monkeypatch.setattr(server, "run_logon_task", lambda name: captured.append(("run", name)))
+    monkeypatch.setattr(server, "run_task", lambda name: captured.append(("run", name)))
 
     result = server.install_startup(Namespace(host="127.0.0.1", port=5050, threads=4))
 
@@ -74,7 +74,7 @@ def test_server_startup_registers_background_task(monkeypatch, tmp_path):
 
 
 def test_server_startup_status_reports_task_and_listener(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr(server, "logon_task_exists", lambda _name: True)
+    monkeypatch.setattr(server, "task_exists", lambda _name: True)
     monkeypatch.setattr(server, "_port_is_listening", lambda _host, _port: True)
     monkeypatch.setattr(server, "_log_path", lambda: tmp_path / "server.log")
 
