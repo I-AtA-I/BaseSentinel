@@ -36,16 +36,16 @@ The default host is loopback-only. This is intentional: do not expose the applic
 basesentinel-server run --host 0.0.0.0 --port 5000
 ```
 
-## Start automatically when Windows boots
+## Start automatically after Windows sign-in
 
-From an **Administrator PowerShell** opened in the directory containing the `.env` file, register a Task Scheduler boot task:
+From PowerShell opened in the directory containing the `.env` file, register a per-user Task Scheduler task:
 
 ```powershell
 basesentinel-server startup-install --host 127.0.0.1 --port 5000
 basesentinel-server startup-status
 ```
 
-The task starts the server at Windows boot, before an interactive user signs in. It runs as the built-in LocalSystem account, uses the same working directory so the existing `.env` file is loaded, and retries a server process that exits unexpectedly. The command also asks Task Scheduler to start the server immediately. Administrative privileges are required to register or remove this system-start task.
+The task starts the server when the current Windows user signs in. It runs with that user's normal privileges, uses the same working directory so the existing `.env` file is loaded, and retries a server process that exits unexpectedly. The command also asks Task Scheduler to start the server immediately. Administrator privileges are not required.
 
 Remove the automatic startup task with:
 
@@ -53,7 +53,7 @@ Remove the automatic startup task with:
 basesentinel-server startup-remove
 ```
 
-Removing the task does not stop a server process that is already running. The task runs under LocalSystem at boot; the server is still an ordinary Waitress process managed by Task Scheduler, not a registered Windows service.
+Removing the task does not stop a server process that is already running. The server runs in the signed-in user's session; this is not a Windows service and it does not start before sign-in.
 
 ## Database and network notes
 
