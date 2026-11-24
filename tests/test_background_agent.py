@@ -508,3 +508,15 @@ def test_start_worker_rejects_unrelated_windows_worker_pid(
     finally:
         if held:
             held.pop().close()
+
+
+def test_user_worker_is_blocked_when_system_wide_task_is_installed(monkeypatch):
+    from basesentinel_agent import background
+    from basesentinel_windows import startup
+
+    monkeypatch.setattr(background.os, "name", "nt")
+    monkeypatch.setenv("BASESENTINEL_AGENT_SCOPE", "user")
+    monkeypatch.setattr(startup, "is_system_boot_task", lambda _name: True)
+
+    with pytest.raises(RuntimeError, match="system-wide BaseSentinel collector"):
+        background.start_background_worker()
