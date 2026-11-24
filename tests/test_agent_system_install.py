@@ -168,3 +168,57 @@ def test_admin_owner_reports_takeown_failure(monkeypatch, tmp_path):
         system_install._set_admin_owner(tmp_path)
 
     assert "Access is denied." in str(exc.value)
+
+
+
+def test_runtime_acl_reset_preserves_direct_access_for_files(monkeypatch, tmp_path):
+    commands = []
+    monkeypatch.setattr(
+        "basesentinel_windows.startup.windows_system_executable",
+        lambda name: rf"C:\\Windows\\System32\\{name}",
+    )
+
+    runtime = tmp_path / "Runtime"
+    runtime.mkdir()
+    (runtime / "pythonw.exe").write_text("binary-placeholder", encoding="utf-8")
+
+    def fake_run(command, **kwargs):
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(system_install.subprocess, "run", fake_run)
+
+    system_install._run_icacls(runtime, users_read_only=True)
+
+    assert len(commands) == 2
+    assert "/T" not in commands[0]
+    assert "*S-1-5-18:(OI)(CI)(F)" in commands[0]
+    assert "*S-1-5-32-544:(OI)(CI)(F)" in commands[0]
+    assert "*S-1-5-32-545:(OI)(CI)(RX)" in commands[0]
+    assert commands[1] == [
+        r"C:\\Windows\\System32\\icacls.exe",
+        str(runtime / "*"),
+        "/reset",
+        "/T",
+    ]
+
+
+def test_runtime_acl_reset_skips_empty_directory(monkeypatch, tmp_path):
+    commands = []
+    monkeypatch.setattr(
+        "basesentinel_windows.startup.windows_system_executable",
+        lambda name: rf"C:\\Windows\\System32\\{name}",
+    )
+    monkeypatch.setattr(
+        system_install.subprocess,
+        "run",
+        lambda command, **kwargs: (
+            commands.append(command)
+            or subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        ),
+    )
+
+    system_install._run_icacls(tmp_path, users_read_only=False)
+
+    assert len(commands) == 1
+    assert "/T" not in commands[0]

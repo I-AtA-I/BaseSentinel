@@ -70,10 +70,12 @@ def _run_icacls(
     users_read_only: bool,
     recursive: bool = True,
 ) -> None:
+    """Set the directory ACL and restore inherited ACLs on existing descendants."""
     from basesentinel_windows.startup import windows_system_executable
 
+    executable = windows_system_executable("icacls.exe")
     arguments = [
-        windows_system_executable("icacls.exe"),
+        executable,
         str(path),
         "/inheritance:r",
         "/grant:r",
@@ -82,8 +84,6 @@ def _run_icacls(
     ]
     if users_read_only:
         arguments.append("*S-1-5-32-545:(OI)(CI)(RX)")
-    if recursive:
-        arguments.append("/T")
 
     try:
         result = subprocess.run(
@@ -103,6 +103,32 @@ def _run_icacls(
             f"Could not secure {path} with Windows ACLs."
             + (f" Details: {details}" if details else "")
         )
+
+    # Applying OI/CI ACEs recursively with /T creates inherit-only entries on
+    # files. Reset descendants instead so they inherit the protected parent
+    # ACL, including direct access required by SYSTEM on regular files.
+    if recursive and any(path.iterdir()):
+        reset_command = [executable, str(path / "*"), "/reset", "/T"]
+        try:
+            reset_result = subprocess.run(
+                reset_command,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+            )
+        except OSError as exc:
+            raise RuntimeError(
+                f"Could not restore inherited ACLs below {path}: {exc}"
+            ) from exc
+
+        if reset_result.returncode != 0:
+            details = (reset_result.stderr or reset_result.stdout).strip()[-800:]
+            raise RuntimeError(
+                f"Could not restore inherited ACLs below {path}."
+                + (f" Details: {details}" if details else "")
+            )
 
 
 
