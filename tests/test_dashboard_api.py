@@ -180,6 +180,13 @@ def seeded_dashboard(app, users):
         acknowledged_alert.acknowledged_by_user_id = users["analyst"]
         acknowledged_alert.acknowledged_at = utcnow_naive()
 
+        # Keep one open alert outside the selected analytics period.
+        open_alert = Alert.query.filter_by(status="open").one()
+        old_alert_time = (base - timedelta(days=2)).replace(tzinfo=None)
+        open_alert.first_seen_at = old_alert_time
+        open_alert.last_seen_at = old_alert_time
+        open_alert.created_at = old_alert_time
+
         db.session.commit()
 
         return {
