@@ -83,7 +83,7 @@ def build_logon_task_xml(
     ET.SubElement(settings, _tag("RunOnlyIfNetworkAvailable")).text = "false"
     ET.SubElement(settings, _tag("AllowStartOnDemand")).text = "true"
     ET.SubElement(settings, _tag("Enabled")).text = "true"
-    ET.SubElement(settings, _tag("Hidden")).text = "true"
+    ET.SubElement(settings, _tag("Hidden")).text = "false"
     ET.SubElement(settings, _tag("ExecutionTimeLimit")).text = "PT0S"
     ET.SubElement(settings, _tag("Priority")).text = "7"
     if restart_on_failure:
