@@ -89,6 +89,34 @@ def build_startup_task_xml(
     return ET.tostring(root, encoding="unicode", xml_declaration=True)
 
 
+
+def windows_system_directory() -> Path:
+    """Resolve System32 through the Windows API rather than environment variables."""
+    if os.name != "nt":
+        return Path()
+
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    get_system_directory = kernel32.GetSystemDirectoryW
+    get_system_directory.argtypes = [wintypes.LPWSTR, wintypes.UINT]
+    get_system_directory.restype = wintypes.UINT
+    buffer = ctypes.create_unicode_buffer(32768)
+    length = get_system_directory(buffer, len(buffer))
+    if not length or length >= len(buffer):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return Path(buffer.value)
+
+
+def windows_system_executable(name: str) -> str:
+    """Return an absolute System32 path for a Windows inbox executable."""
+    if not name or Path(name).name != name:
+        raise ValueError("A System32 executable name is required.")
+    if os.name != "nt":
+        return name
+    return str(windows_system_directory() / name)
+
 def _require_windows() -> None:
     if os.name != "nt":
         raise RuntimeError("Automatic startup registration is supported on Windows only.")
@@ -97,7 +125,7 @@ def _require_windows() -> None:
 def _run_schtasks(arguments: list[str]) -> subprocess.CompletedProcess[str]:
     try:
         result = subprocess.run(
-            ["schtasks.exe", *arguments],
+            [windows_system_executable("schtasks.exe"), *arguments],
             capture_output=True,
             text=True,
             check=False,
@@ -349,7 +377,7 @@ def run_elevated(command: Sequence[str]) -> None:
         "runas",
         str(command[0]),
         parameters,
-        str(Path.cwd()),
+        str(windows_system_directory()),
         1,
     )
     result_code = result if isinstance(result, int) else getattr(result, "value", 0)
