@@ -15,7 +15,8 @@ dependencies = [
     "python-dotenv>=1.0",
     "pystray>=0.19.5",
     "Pillow>=10.0",
-    "reportlab>=4.0"
+    "reportlab>=4.0",
+    "waitress>=3.0"
 ]
 
 [project.optional-dependencies]
@@ -25,6 +26,7 @@ dev = [
 
 [project.scripts]
 basesentinel-agent = "basesentinel_agent.cli:main"
+basesentinel-server = "basesentinel.server:main"
 
 [project.gui-scripts]
 basesentinel-agent-gui = "basesentinel_agent.gui:main"

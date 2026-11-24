@@ -519,7 +519,7 @@ class AgentWindow:
         ).pack(fill="x", pady=(4, 10))
         tk.Label(
             scope,
-            text="The background worker stays visible in Task Manager. It is started only by an explicit action and is not installed as a service or auto-start task.",
+            text="The background worker stays visible in Task Manager and runs independently of this window. Use the agent CLI to configure automatic startup after this Windows user signs in.",
             bg=COLORS["panel_alt"],
             fg=COLORS["muted"],
             justify="left",
@@ -1509,7 +1509,7 @@ class AgentWindow:
 
     def close(self) -> None:
         self.closing = True
-        # The explicitly started background process is intentionally left running.
+        # The detached background worker is intentionally left running when the console closes.
         process = self.process
         if process is not None and process.poll() is None:
             process.terminate()

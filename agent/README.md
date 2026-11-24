@@ -1,6 +1,6 @@
 # BaseSentinel Windows Agent (MVP)
 
-The Windows endpoint agent is an explicitly started collector. It supports a visible foreground mode and a detached, windowless background mode. Background mode continues after the GUI or terminal used to start it is closed. It is not installed as a Windows service and does not start automatically with Windows.
+The Windows endpoint agent runs its collector as a separate, windowless background process. The GUI is optional: once monitoring has started, the collector continues after the GUI closes. Automatic startup can be enabled for the current Windows user so monitoring resumes after sign-in. The collector is not installed as a Windows service.
 
 ## Requirements
 
@@ -60,9 +60,26 @@ basesentinel-agent background-status
 basesentinel-agent stop
 ```
 
-The background worker is a separate `python.exe` process. It is visible in Windows Task Manager, holds a single-instance process lock, and writes its output to `%LOCALAPPDATA%\\BaseSentinel\\agent.log`. The GUI can show the worker state and read this log while it is open. Closing the GUI does not stop the worker. Use **Stop agent** in the GUI or `basesentinel-agent stop` to request a graceful shutdown; an in-progress Windows Event Log read or HTTP request is allowed to finish before the process exits.
+The background worker is a separate `pythonw.exe` process. It is visible in Windows Task Manager, holds a single-instance process lock, and writes its output to `%LOCALAPPDATA%\\BaseSentinel\\agent.log`. The GUI can show the worker state and read this log while it is open. Closing the GUI does not stop the worker. Use **Stop agent** in the GUI or `basesentinel-agent stop` to request a graceful shutdown; an in-progress Windows Event Log read or HTTP request is allowed to finish before the process exits.
 
-Background mode starts only after an explicit `Start background` click or `basesentinel-agent start` command. It does not install a service, scheduled task, logon trigger, or automatic startup entry. It runs in the current user's session and stops when that process/session ends.
+Background mode can be started manually or automatically. To start it whenever the current Windows user signs in, run the following after enrolling the device:
+
+## Automatic startup
+
+```powershell
+basesentinel-agent startup-install --interval 60 --batch-size 500
+basesentinel-agent startup-status
+```
+
+This creates a visible Windows Task Scheduler task triggered when the enrolled user signs in and starts the collector immediately. The task uses the same user account as enrollment because the agent credential is protected with that user's Windows DPAPI key. This is a per-user logon task, not a Windows service; it does not run before sign-in.
+
+Remove automatic startup with:
+
+```powershell
+basesentinel-agent startup-remove
+```
+
+Removing the task does not stop a collector that is already running. Use `basesentinel-agent stop` to stop monitoring separately.
 
 ## Check enrollment
 
@@ -74,7 +91,7 @@ Reading the Security log may require an elevated terminal or membership in the l
 
 ## Scope and limitations
 
-- Background mode is an explicitly started, detached user-session process. It does not install a Windows service, scheduled task, auto-start, remote command execution, or conceal itself from Task Manager.
+- Background mode runs as a detached process in the enrolled user's Windows session. It is not a Windows service. The optional automatic-start task is scoped to that user and does not run before sign-in.
 - The collector stores a Windows Security EventRecordID checkpoint alongside queued events in one SQLite transaction. It reads ordered batches of up to 1,000 matching records, so backlogs can be drained over repeated cycles without relying on a short time window. If the Windows Security log is cleared and its record ID resets below the saved checkpoint, collection restarts from the beginning of the retained log.
 - Run enrollment and collection as the same Windows user so DPAPI can decrypt the stored credential.
 - Treat event messages and event data as security telemetry; review retention and access controls on the SIEM server.
@@ -90,7 +107,7 @@ basesentinel-agent-gui
 
 Use either the one-time invitation link or the invitation code plus the server URL. The current invitation workflow does not require a Server ID, server access code, or connection password. The client exchanges the invitation for an individual agent credential and stores it using Windows DPAPI.
 
-The GUI is packaged as a windowed Windows application so launching it does not open an extra console. **Start background** launches the separate windowless collector; you can close the GUI and the collector continues. Reopen the GUI to inspect its status and activity log, or use **Stop agent** to request a clean shutdown. This does not install a service or configure automatic startup.
+The GUI is packaged as a windowed Windows application so launching it does not open an extra console. **Start background** launches the separate windowless collector; you can close the GUI and the collector continues. Reopen the GUI to inspect its status and activity log, or use **Stop agent** to request a clean shutdown. Automatic startup is configured separately with the CLI commands above.
 
 ## Enrollment policy
 
@@ -118,7 +135,7 @@ Administrators can open **Clients** from the dashboard navigation to view enroll
 
 ## Agent diagnostics and event delivery
 
-The Windows agent GUI now provides **Run diagnostics**, **Collect now**, **Start monitoring**, and **Stop** actions. Its output panel shows collection results, delivery failures, server errors, queue depth, and the Security log checkpoint. Keep the GUI open while continuous monitoring is running; closing it stops the foreground agent process.
+The Windows agent GUI now provides **Run diagnostics**, **Collect now**, **Start monitoring**, and **Stop** actions. Its output panel shows collection results, delivery failures, server errors, queue depth, and the Security log checkpoint. The GUI is not required while continuous background monitoring is running. Closing the GUI does not stop the detached collector.
 
 Run the same checks and lifecycle controls from PowerShell:
 
