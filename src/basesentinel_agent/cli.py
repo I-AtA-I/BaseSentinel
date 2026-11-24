@@ -7,6 +7,7 @@ import platform
 import socket
 import sys
 import threading
+from pathlib import Path
 from contextlib import redirect_stderr, redirect_stdout
 
 from basesentinel_agent.background import (
