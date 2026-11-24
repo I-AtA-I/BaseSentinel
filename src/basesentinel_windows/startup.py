@@ -338,8 +338,6 @@ def register_system_boot_task(
                 str(temporary_path),
                 "/RU",
                 "SYSTEM",
-                "/RL",
-                "HIGHEST",
                 "/F",
             ]
         )
