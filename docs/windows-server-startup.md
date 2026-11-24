@@ -36,7 +36,7 @@ The default host is loopback-only. This is intentional: do not expose the applic
 basesentinel-server run --host 0.0.0.0 --port 5000
 ```
 
-## Start automatically after Windows sign-in
+## Start automatically when Windows boots
 
 From an **Administrator PowerShell** opened in the directory containing the `.env` file, register a hidden Task Scheduler task:
 
