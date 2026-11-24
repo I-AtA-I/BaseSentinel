@@ -349,3 +349,25 @@ def run_elevated(command: Sequence[str]) -> None:
         raise RuntimeError(
             f"Windows could not start the elevated installer (ShellExecute result {result_code})."
         )
+
+
+def is_system_boot_task(task_name: str) -> bool:
+    """Return whether a registered task runs as SYSTEM from a boot trigger."""
+    _require_windows()
+    try:
+        result = _run_schtasks(["/Query", "/TN", task_name, "/XML"])
+        root = ET.fromstring(result.stdout)
+    except (RuntimeError, ET.ParseError):
+        return False
+
+    principal = root.find(f".//{_tag('Principal')}")
+    if principal is None:
+        return False
+    user_id = principal.findtext(_tag("UserId"))
+    logon_type = principal.findtext(_tag("LogonType"))
+    has_boot_trigger = root.find(f".//{_tag('BootTrigger')}") is not None
+    return (
+        user_id == "S-1-5-18"
+        and logon_type == "ServiceAccount"
+        and has_boot_trigger
+    )
