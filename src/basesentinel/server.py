@@ -11,7 +11,7 @@ from pathlib import Path
 
 from basesentinel_windows.startup import (
     task_exists,
-    register_boot_task,
+    register_logon_task,
     remove_task,
     run_task,
 )
@@ -30,9 +30,9 @@ def _windowless_interpreter() -> str:
 
 
 def _log_path() -> Path:
-    root = os.environ.get("PROGRAMDATA") or os.environ.get("LOCALAPPDATA")
+    root = os.environ.get("LOCALAPPDATA") or os.environ.get("PROGRAMDATA")
     if not root:
-        raise RuntimeError("PROGRAMDATA and LOCALAPPDATA are not available for the BaseSentinel server log.")
+        raise RuntimeError("LOCALAPPDATA and PROGRAMDATA are not available for the BaseSentinel server log.")
     directory = Path(root) / "BaseSentinel" / "Logs"
     directory.mkdir(parents=True, exist_ok=True)
     return directory / "server.log"
@@ -106,7 +106,7 @@ def install_startup(args) -> int:
     try:
         _validate_server_options(args.host, args.port, args.threads)
         executable = _windowless_interpreter()
-        register_boot_task(
+        register_logon_task(
             _TASK_NAME,
             [
                 executable,
@@ -121,14 +121,14 @@ def install_startup(args) -> int:
                 str(args.threads),
             ],
             working_directory=Path.cwd(),
-            description="Start the BaseSentinel server when Windows boots.",
+            description="Start the BaseSentinel server after the current user signs in.",
             restart_on_failure=True,
         )
     except (RuntimeError, ValueError, OSError) as exc:
         print(f"Could not install BaseSentinel server automatic startup: {exc}")
         return 1
 
-    print("BaseSentinel server automatic startup is installed for Windows boot.")
+    print("BaseSentinel server automatic startup is installed for the current Windows user.")
     print(f"Server address: {args.host}:{args.port}")
     print(f"Server log: {_log_path()}")
     if _port_is_listening(args.host, args.port):
@@ -139,7 +139,7 @@ def install_startup(args) -> int:
             print("Windows Task Scheduler was asked to start the server now.")
         except RuntimeError as exc:
             print(f"The startup task is installed, but could not be started now: {exc}")
-            print("It will still run at the next Windows boot.")
+            print("It will still run at the next Windows sign-in.")
     return 0
 
 
