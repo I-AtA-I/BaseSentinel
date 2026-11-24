@@ -107,17 +107,17 @@ def _run_icacls(
 
 
 def _set_admin_owner(path: Path, *, recursive: bool = True) -> None:
-    """Make the Administrators group the owner so standard users cannot rewrite files."""
+    """Assign ownership to Administrators using Windows' privilege-aware utility."""
     from basesentinel_windows.startup import windows_system_executable
 
     command = [
-        windows_system_executable("icacls.exe"),
+        windows_system_executable("takeown.exe"),
+        "/F",
         str(path),
-        "/setowner",
-        "*S-1-5-32-544",
+        "/A",
     ]
     if recursive:
-        command.append("/T")
+        command.append("/R")
     try:
         result = subprocess.run(
             command,
@@ -128,7 +128,9 @@ def _set_admin_owner(path: Path, *, recursive: bool = True) -> None:
             check=False,
         )
     except OSError as exc:
-        raise RuntimeError(f"Could not set Administrators ownership on {path}: {exc}") from exc
+        raise RuntimeError(
+            f"Could not set Administrators ownership on {path}: {exc}"
+        ) from exc
 
     if result.returncode != 0:
         details = (result.stderr or result.stdout).strip()[-800:]

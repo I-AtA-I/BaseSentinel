@@ -4,6 +4,8 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from basesentinel_agent import storage, system_install
 
 
@@ -100,7 +102,7 @@ def test_system_entry_point_selects_machine_scope():
     assert "startup-service-run" in system_install._SYSTEM_ENTRY_POINT
 
 
-def test_admin_owner_uses_administrators_group_and_system32_tool(monkeypatch, tmp_path):
+def test_admin_owner_uses_takeown_and_system32_tool(monkeypatch, tmp_path):
     captured = {}
     monkeypatch.setattr(
         "basesentinel_windows.startup.windows_system_executable",
@@ -117,11 +119,11 @@ def test_admin_owner_uses_administrators_group_and_system32_tool(monkeypatch, tm
     system_install._set_admin_owner(target)
 
     assert captured["command"] == [
-        r"C:\Windows\System32\icacls.exe",
+        r"C:\Windows\System32\takeown.exe",
+        "/F",
         str(target),
-        "/setowner",
-        "*S-1-5-32-544",
-        "/T",
+        "/A",
+        "/R",
     ]
 
 
@@ -142,5 +144,27 @@ def test_admin_owner_can_be_applied_to_directory_without_recursion(monkeypatch, 
 
     system_install._set_admin_owner(tmp_path, recursive=False)
 
-    assert captured["command"][-1] == "*S-1-5-32-544"
-    assert "/T" not in captured["command"]
+    assert captured["command"][-1] == "/A"
+    assert "/R" not in captured["command"]
+
+
+def test_admin_owner_reports_takeown_failure(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "basesentinel_windows.startup.windows_system_executable",
+        lambda name: rf"C:\Windows\System32\{name}",
+    )
+
+    def fake_run(command, **kwargs):
+        return subprocess.CompletedProcess(
+            command,
+            1,
+            stdout="",
+            stderr="Access is denied.",
+        )
+
+    monkeypatch.setattr(system_install.subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError, match="Could not set Administrators ownership") as exc:
+        system_install._set_admin_owner(tmp_path)
+
+    assert "Access is denied." in str(exc.value)
