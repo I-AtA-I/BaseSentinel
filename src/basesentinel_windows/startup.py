@@ -138,7 +138,7 @@ def register_logon_task(
     description: str = "",
     restart_on_failure: bool = False,
 ) -> None:
-    """Register a hidden per-user task that runs after the current user signs in."""
+    """Register a visible per-user task that runs after the current user signs in."""
     _require_windows()
     xml_content = build_startup_task_xml(
         task_name,
@@ -169,7 +169,7 @@ def register_logon_task(
                 pass
 
 
-def logon_task_exists(task_name: str) -> bool:
+def task_exists(task_name: str) -> bool:
     _require_windows()
     try:
         result = subprocess.run(
@@ -183,16 +183,16 @@ def logon_task_exists(task_name: str) -> bool:
     return result.returncode == 0
 
 
-def remove_logon_task(task_name: str) -> bool:
+def remove_task(task_name: str) -> bool:
     """Remove a registered task, returning false when it does not exist."""
     _require_windows()
-    if not logon_task_exists(task_name):
+    if not task_exists(task_name):
         return False
     _run_schtasks(["/Delete", "/TN", task_name, "/F"])
     return True
 
 
-def run_logon_task(task_name: str) -> None:
+def run_task(task_name: str) -> None:
     """Start a registered task now, without waiting for the next logon."""
     _require_windows()
     _run_schtasks(["/Run", "/TN", task_name])
