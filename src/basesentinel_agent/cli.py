@@ -17,9 +17,9 @@ from basesentinel_agent.background import (
     windowless_python_executable,
 )
 from basesentinel_windows.startup import (
-    logon_task_exists,
+    task_exists,
     register_logon_task,
-    remove_logon_task,
+    remove_task,
 )
 from basesentinel_agent.client import AgentApiError, BaseSentinelClient
 from basesentinel_agent.queue import EventQueue
@@ -484,7 +484,7 @@ def startup_launch(args) -> int:
 
 def remove_startup(args) -> int:
     try:
-        removed = remove_logon_task(_STARTUP_TASK_NAME)
+        removed = remove_task(_STARTUP_TASK_NAME)
     except RuntimeError as exc:
         print(f"Could not remove BaseSentinel automatic startup: {exc}")
         return 1
@@ -499,7 +499,7 @@ def remove_startup(args) -> int:
 
 def startup_status(args) -> int:
     try:
-        installed = logon_task_exists(_STARTUP_TASK_NAME)
+        installed = task_exists(_STARTUP_TASK_NAME)
         state = background_status()
     except (RuntimeError, OSError, ValueError) as exc:
         print(f"Could not read BaseSentinel startup status: {exc}")
