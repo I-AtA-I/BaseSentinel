@@ -63,7 +63,7 @@ basesentinel-agent stop
 
 The background worker is a separate `pythonw.exe` process. It is visible in Windows Task Manager, holds a single-instance process lock, and writes its output to `%LOCALAPPDATA%\\BaseSentinel\\agent.log`. The GUI can show the worker state and read this log while it is open. Closing the GUI does not stop the worker. Use **Stop agent** in the GUI or `basesentinel-agent stop` to request a graceful shutdown; an in-progress Windows Event Log read or HTTP request is allowed to finish before the process exits.
 
-Background mode can be started manually or automatically. To start it whenever the current Windows user signs in, run the following after enrolling the device:
+After enrolling the endpoint under the Windows account that owns its enrollment credential, install the machine-wide collector with:
 
 ## Automatic startup
 
