@@ -1,11 +1,12 @@
 # BaseSentinel Windows Agent (MVP)
 
-The Windows endpoint agent runs its collector as a separate, windowless background process. The GUI is optional: once monitoring has started, the collector continues after the GUI closes. Automatic startup can be enabled for the current Windows user so monitoring resumes after sign-in. The collector is not installed as a Windows service.
+The Windows endpoint agent can run as a single, machine-wide collector under the Windows LocalSystem account. It starts at system boot, before any user signs in, and monitors the computer for every Windows account. The GUI remains optional. The system-wide collector runs from a protected ProgramData copy of its Python runtime and application code.
 
 ## Requirements
 
-- Windows 10/11 or Windows Server with PowerShell and access to the Windows Security event log.
-- Python 3.12+.
+- Windows 10/11 or Windows Server with Task Scheduler and PowerShell.
+- Python 3.12+ installed on the device.
+- Administrator approval for the system-wide startup installation.
 - A BaseSentinel server reachable over HTTPS (plain HTTP is accepted only for localhost development).
 
 ## Install
@@ -62,7 +63,7 @@ basesentinel-agent stop
 
 The background worker is a separate `pythonw.exe` process. It is visible in Windows Task Manager, holds a single-instance process lock, and writes its output to `%LOCALAPPDATA%\\BaseSentinel\\agent.log`. The GUI can show the worker state and read this log while it is open. Closing the GUI does not stop the worker. Use **Stop agent** in the GUI or `basesentinel-agent stop` to request a graceful shutdown; an in-progress Windows Event Log read or HTTP request is allowed to finish before the process exits.
 
-Background mode can be started manually or automatically. To start it whenever the current Windows user signs in, run the following after enrolling the device:
+After enrolling the endpoint under the Windows account that owns its enrollment credential, install the machine-wide collector with:
 
 ## Automatic startup
 
@@ -71,7 +72,9 @@ basesentinel-agent startup-install --interval 60 --batch-size 500
 basesentinel-agent startup-status
 ```
 
-This creates a visible Windows Task Scheduler task triggered when the enrolled user signs in and starts the collector immediately. The task uses the same user account as enrollment because the agent credential is protected with that user's Windows DPAPI key. This is a per-user logon task, not a Windows service; it does not run before sign-in.
+This requests one system-wide installation. Windows displays a UAC prompt so an Administrator can explicitly approve the changes. After approval, BaseSentinel copies the required Python runtime and agent code to ProgramData\BaseSentinel\Runtime, restricts the runtime so ordinary users can read and execute but cannot modify it, and stores the encrypted enrollment credential and event queue under ProgramData\BaseSentinel\Data. The credential is protected with Windows DPAPI machine scope and the data directory is restricted to SYSTEM and Administrators.
+
+The visible Task Scheduler task named BaseSentinel Agent runs as NT AUTHORITY\SYSTEM at Windows boot. It is one collector for the whole computer, not one copy per logged-in user, and it can read the Windows Security log without relying on each user's Event Log Readers token. It starts before sign-in and restarts after a task failure. It does not run the optional GUI.
 
 Remove automatic startup with:
 
@@ -79,7 +82,7 @@ Remove automatic startup with:
 basesentinel-agent startup-remove
 ```
 
-Removing the task does not stop a collector that is already running. Use `basesentinel-agent stop` to stop monitoring separately.
+Removing automatic startup requires Administrator approval. It stops and removes the system task, but deliberately retains the protected runtime and machine data so event history and configuration are not silently deleted. Use `basesentinel-agent stop` to stop a running collector without disabling the next boot trigger.
 
 ## Check enrollment
 
@@ -91,9 +94,9 @@ Reading the Security log may require an elevated terminal or membership in the l
 
 ## Scope and limitations
 
-- Background mode runs as a detached process in the enrolled user's Windows session. It is not a Windows service. The optional automatic-start task is scoped to that user and does not run before sign-in.
+- The system-wide automatic collector runs as LocalSystem from a protected copy under ProgramData. It starts at boot and covers all Windows accounts; it does not start one collector per user.
 - The collector stores a Windows Security EventRecordID checkpoint alongside queued events in one SQLite transaction. It reads ordered batches of up to 1,000 matching records, so backlogs can be drained over repeated cycles without relying on a short time window. If the Windows Security log is cleared and its record ID resets below the saved checkpoint, collection restarts from the beginning of the retained log.
-- Run enrollment and collection as the same Windows user so DPAPI can decrypt the stored credential.
+- Initial enrollment still takes place in the current Windows user session. The system-wide installer securely transfers the token into a machine-scope DPAPI configuration for the LocalSystem collector.
 - Treat event messages and event data as security telemetry; review retention and access controls on the SIEM server.
 
 
@@ -107,7 +110,7 @@ basesentinel-agent-gui
 
 Use either the one-time invitation link or the invitation code plus the server URL. The current invitation workflow does not require a Server ID, server access code, or connection password. The client exchanges the invitation for an individual agent credential and stores it using Windows DPAPI.
 
-The GUI is packaged as a windowed Windows application so launching it does not open an extra console. **Start background** launches the separate windowless collector; you can close the GUI and the collector continues. Reopen the GUI to inspect its status and activity log, or use **Stop agent** to request a clean shutdown. Automatic startup is configured separately with the CLI commands above.
+The GUI is packaged as a windowed Windows application so launching it does not open an extra console. **Start background** launches a per-user windowless collector when system-wide startup has not been installed. Once the machine-wide task is installed, a separate per-user collector is blocked to avoid duplicate event collection. Use the CLI startup-status and stop commands to inspect or stop the system-wide task. Automatic startup is configured separately with the CLI commands above and requires Administrator approval.
 
 ## Enrollment policy
 

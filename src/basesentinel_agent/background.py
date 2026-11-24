@@ -325,6 +325,19 @@ def start_background_worker(
     if not isinstance(interval, (int, float)) or not math.isfinite(interval) or interval <= 0:
         raise ValueError("Collection interval must be a finite number greater than zero.")
 
+    if (
+        os.name == "nt"
+        and data_dir is None
+        and os.environ.get("BASESENTINEL_AGENT_SCOPE", "").casefold() != "machine"
+    ):
+        from basesentinel_windows.startup import is_system_boot_task
+
+        if is_system_boot_task("BaseSentinel Agent"):
+            raise RuntimeError(
+                "The system-wide BaseSentinel collector is installed for all Windows users. "
+                "A separate per-user worker was not started to avoid duplicate events."
+            )
+
     paths = _paths(data_dir)
     paths["root"].mkdir(parents=True, exist_ok=True)
 

@@ -88,7 +88,7 @@ def test_register_logon_task_writes_xml_then_calls_schtasks(monkeypatch, tmp_pat
         working_directory=tmp_path,
     )
 
-    assert captured["xml_bytes"].startswith(b"\\xff\\xfe")
+    assert captured["xml_bytes"].startswith(b"\xff\xfe")
     assert "encoding='utf-16'" in captured["xml_bytes"].decode("utf-16").lower()
     assert captured["arguments"][:3] == ["/Create", "/TN", "BaseSentinel Agent"]
     assert captured["xml"].findtext("task:Actions/task:Exec/task:Command", namespaces=_NAMESPACE) == r"C:\Python\pythonw.exe"
@@ -99,6 +99,7 @@ def test_register_logon_task_writes_xml_then_calls_schtasks(monkeypatch, tmp_pat
 def test_logon_task_query_and_remove(monkeypatch):
     calls = []
     responses = [
+        subprocess.CompletedProcess([], 0, stdout="TaskName", stderr=""),
         subprocess.CompletedProcess([], 0, stdout="TaskName", stderr=""),
         subprocess.CompletedProcess([], 0, stdout="", stderr=""),
     ]
@@ -114,7 +115,8 @@ def test_logon_task_query_and_remove(monkeypatch):
     assert startup.task_exists("BaseSentinel Agent") is True
     assert startup.remove_task("BaseSentinel Agent") is True
     assert calls[0][:4] == ["schtasks.exe", "/Query", "/TN", "BaseSentinel Agent"]
-    assert calls[1][:4] == ["schtasks.exe", "/Delete", "/TN", "BaseSentinel Agent"]
+    assert calls[1][:4] == ["schtasks.exe", "/Query", "/TN", "BaseSentinel Agent"]
+    assert calls[2][:4] == ["schtasks.exe", "/Delete", "/TN", "BaseSentinel Agent"]
 
 
 
@@ -146,3 +148,73 @@ def test_task_can_be_disabled_without_removing_it(monkeypatch):
 
     assert startup.disable_task("BaseSentinel Server") is True
     assert calls == [["/Change", "/TN", "BaseSentinel Server", "/Disable"]]
+
+
+def test_system_boot_task_xml_runs_visible_task_as_system_before_logon(tmp_path):
+    xml_text = startup.build_system_boot_task_xml(
+        "BaseSentinel Agent",
+        [
+            r"C:\ProgramData\BaseSentinel\Runtime\python\pythonw.exe",
+            r"C:\ProgramData\BaseSentinel\Runtime\start_agent.py",
+            "--interval",
+            "60",
+        ],
+        working_directory=tmp_path,
+        description="One collector for all Windows users.",
+    )
+    root = ET.fromstring(xml_text)
+
+    trigger = root.find("task:Triggers/task:BootTrigger", _NAMESPACE)
+    principal = root.find("task:Principals/task:Principal", _NAMESPACE)
+    settings = root.find("task:Settings", _NAMESPACE)
+    action = root.find("task:Actions/task:Exec", _NAMESPACE)
+
+    assert trigger is not None
+    assert principal.findtext("task:UserId", namespaces=_NAMESPACE) == "S-1-5-18"
+    assert principal.findtext("task:LogonType", namespaces=_NAMESPACE) == "ServiceAccount"
+    assert principal.findtext("task:RunLevel", namespaces=_NAMESPACE) == "HighestAvailable"
+    assert settings.findtext("task:Hidden", namespaces=_NAMESPACE) == "false"
+    assert settings.findtext("task:StartWhenAvailable", namespaces=_NAMESPACE) == "true"
+    assert settings.findtext("task:RestartOnFailure/task:Count", namespaces=_NAMESPACE) == "3"
+    assert action.findtext("task:Command", namespaces=_NAMESPACE).endswith("pythonw.exe")
+    assert "start_agent.py" in action.findtext("task:Arguments", namespaces=_NAMESPACE)
+
+
+def test_register_system_boot_task_writes_utf16_and_registers_visible_task(monkeypatch, tmp_path):
+    captured = {}
+    monkeypatch.setattr(startup, "_require_windows", lambda: None)
+
+    def fake_run(arguments):
+        captured["arguments"] = arguments
+        xml_path = __import__("pathlib").Path(arguments[arguments.index("/XML") + 1])
+        captured["bytes"] = xml_path.read_bytes()
+        captured["root"] = ET.parse(xml_path).getroot()
+        return subprocess.CompletedProcess(arguments, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(startup, "_run_schtasks", fake_run)
+    startup.register_system_boot_task(
+        "BaseSentinel Agent",
+        [r"C:\ProgramData\BaseSentinel\Runtime\python\pythonw.exe", "start_agent.py"],
+        working_directory=tmp_path,
+    )
+
+    assert captured["bytes"].startswith(b"\xff\xfe")
+    assert "encoding='utf-16'" in captured["bytes"].decode("utf-16").lower()
+    assert captured["arguments"][:3] == ["/Create", "/TN", "BaseSentinel Agent"]
+    principal = captured["root"].find("task:Principals/task:Principal", _NAMESPACE)
+    assert principal.findtext("task:UserId", namespaces=_NAMESPACE) == "S-1-5-18"
+
+
+def test_system_boot_task_detection_checks_system_account_and_boot_trigger(monkeypatch):
+    xml_text = startup.build_system_boot_task_xml(
+        "BaseSentinel Agent",
+        [r"C:\ProgramData\BaseSentinel\Runtime\python\pythonw.exe", "start_agent.py"],
+    )
+    monkeypatch.setattr(startup, "_require_windows", lambda: None)
+    monkeypatch.setattr(
+        startup,
+        "_run_schtasks",
+        lambda args: subprocess.CompletedProcess(args, 0, stdout=xml_text, stderr=""),
+    )
+
+    assert startup.is_system_boot_task("BaseSentinel Agent") is True

@@ -44,15 +44,15 @@ def _release(blob: _DataBlob, kernel32) -> None:
         kernel32.LocalFree(ctypes.cast(blob.pbData, ctypes.c_void_p))
 
 
-def protect_secret(secret: str) -> bytes:
-    """Protect a secret for the current Windows user with DPAPI."""
+def protect_secret(secret: str, *, machine_scope: bool = False) -> bytes:
+    """Protect a secret with DPAPI for the current user or the local machine."""
     _require_windows()
     crypt32, kernel32 = _api()
     source, source_buffer = _blob(secret.encode("utf-8"))
     destination = _DataBlob()
     if not crypt32.CryptProtectData(
-        ctypes.byref(source), "BaseSentinel agent credential", None, None, None, 0,
-        ctypes.byref(destination),
+        ctypes.byref(source), "BaseSentinel agent credential", None, None, None,
+        0x4 if machine_scope else 0, ctypes.byref(destination),
     ):
         raise ctypes.WinError(ctypes.get_last_error())
     try:
@@ -61,14 +61,17 @@ def protect_secret(secret: str) -> bytes:
         _release(destination, kernel32)
 
 
-def unprotect_secret(encrypted: bytes) -> str:
-    """Decrypt a DPAPI-protected secret for the current Windows user."""
+def unprotect_secret(encrypted: bytes, *, machine_scope: bool = False) -> str:
+    """Decrypt a DPAPI-protected secret for the current user or local machine."""
     _require_windows()
     crypt32, kernel32 = _api()
     source, source_buffer = _blob(encrypted)
     destination = _DataBlob()
+    # The scope is selected when the blob is encrypted. CryptUnprotectData
+    # must be called with dwFlags=0, including for machine-scope blobs.
     if not crypt32.CryptUnprotectData(
-        ctypes.byref(source), None, None, None, None, 0, ctypes.byref(destination),
+        ctypes.byref(source), None, None, None, None, 0,
+        ctypes.byref(destination),
     ):
         raise ctypes.WinError(ctypes.get_last_error())
     try:

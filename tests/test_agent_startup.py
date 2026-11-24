@@ -17,61 +17,58 @@ def test_agent_startup_commands_are_available_with_safe_defaults():
     assert status.handler is cli.startup_status
     silent_start = parser.parse_args(["startup-run"])
     assert silent_start.handler is cli.startup_launch
+    service_start = parser.parse_args(["startup-service-run"])
+    assert service_start.handler is cli.startup_service_run
+    assert parser.parse_args(["startup-install-admin", "--bootstrap-file", "handoff.json"]).handler is cli.install_startup_admin
+    assert parser.parse_args(["startup-remove-admin"]).handler is cli.remove_startup_admin
+    assert parser.parse_args(["startup-stop-admin"]).handler is not None
 
 
-def test_install_startup_registers_logon_task_and_starts_collector(monkeypatch, tmp_path):
+def test_install_startup_requests_system_wide_install(monkeypatch, tmp_path):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     captured = {}
 
-    monkeypatch.setattr(cli.AgentConfigStore, "load", lambda self: {"agent_id": "agent-1"})
-    monkeypatch.setattr(cli, "windowless_python_executable", lambda: r"C:\venv\Scripts\pythonw.exe")
-    monkeypatch.setattr(cli, "default_data_dir", lambda: tmp_path)
-    monkeypatch.setattr(cli, "background_status", lambda: {"running": False, "pid": None})
     monkeypatch.setattr(
-        cli,
-        "register_logon_task",
-        lambda name, command, **kwargs: captured.update(
-            name=name,
-            command=command,
-            options=kwargs,
-        ),
+        cli.AgentConfigStore,
+        "load",
+        lambda self: {
+            "server_url": "https://siem.example.com",
+            "agent_id": "agent-1",
+            "token": "token",
+        },
     )
+    monkeypatch.setattr(cli, "background_status", lambda: {"running": False, "pid": None})
+    monkeypatch.setattr(cli, "is_admin", lambda: True)
     monkeypatch.setattr(
         cli,
-        "start_background_worker",
-        lambda **kwargs: captured.update(start_options=kwargs) or 3210,
+        "_finish_system_install",
+        lambda config, args: captured.update(config=config, args=args) or 0,
     )
 
-    result = cli.install_startup(Namespace(interval=30.0, batch_size=250))
+    args = Namespace(interval=30.0, batch_size=250)
+    result = cli.install_startup(args)
 
     assert result == 0
-    assert captured["name"] == "BaseSentinel Agent"
-    assert captured["command"] == [
-        r"C:\venv\Scripts\pythonw.exe",
-        "-m",
-        "basesentinel_agent.cli",
-        "startup-run",
-        "--interval",
-        "30.0",
-        "--batch-size",
-        "250",
-    ]
-    assert captured["options"]["working_directory"] == tmp_path
-    assert captured["start_options"] == {"batch_size": 250, "interval": 30.0}
+    assert captured["config"]["agent_id"] == "agent-1"
+    assert captured["args"] is args
 
 
-def test_remove_agent_startup_does_not_stop_running_worker(monkeypatch, capsys):
-    captured = {}
-    monkeypatch.setattr(cli, "remove_task", lambda name: captured.update(name=name) or True)
+def test_remove_agent_startup_removes_system_task_and_retains_data(monkeypatch, capsys):
+    from basesentinel_agent import system_install
+
+    monkeypatch.setattr(cli, "is_admin", lambda: True)
+    monkeypatch.setattr(system_install, "remove_system_agent_startup", lambda: True)
 
     result = cli.remove_startup(Namespace())
 
     assert result == 0
-    assert captured["name"] == "BaseSentinel Agent"
-    assert "not stopped" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "automatic startup has been removed" in output
+    assert "data were retained" in output
 
 
-
-def test_scheduled_agent_start_is_silent_and_skips_an_existing_worker(monkeypatch):
+def test_scheduled_agent_start_is_silent_and_skips_an_existing_worker(monkeypatch, tmp_path):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     started = []
     monkeypatch.setattr(cli.AgentConfigStore, "load", lambda self: {"agent_id": "agent-1"})
     monkeypatch.setattr(cli, "background_status", lambda: {"running": True, "pid": 42})
@@ -91,6 +88,7 @@ def test_scheduled_agent_start_logs_launch_errors_without_console_output(
     monkeypatch,
     tmp_path,
 ):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     monkeypatch.setattr(cli.AgentConfigStore, "load", lambda self: {"agent_id": "agent-1"})
     monkeypatch.setattr(cli, "default_data_dir", lambda: tmp_path)
     monkeypatch.setattr(cli, "background_status", lambda: {"running": False})
@@ -104,3 +102,43 @@ def test_scheduled_agent_start_logs_launch_errors_without_console_output(
 
     assert result == 1
     assert "Automatic startup failed: worker failed" in (tmp_path / "agent.log").read_text()
+
+
+def test_unprivileged_startup_install_requests_visible_uac_approval(
+    monkeypatch,
+    tmp_path,
+):
+    from basesentinel_agent import system_install
+
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    bootstrap = tmp_path / "bootstrap.json"
+    bootstrap.write_text("temporary", encoding="utf-8")
+    captured = {}
+
+    monkeypatch.setattr(
+        cli.AgentConfigStore,
+        "load",
+        lambda self: {
+            "server_url": "https://siem.example.com",
+            "agent_id": "agent-123",
+            "token": "token",
+        },
+    )
+    monkeypatch.setattr(cli, "background_status", lambda: {"running": False, "pid": None})
+    monkeypatch.setattr(cli, "is_admin", lambda: False)
+    monkeypatch.setattr(system_install, "create_admin_bootstrap", lambda config: bootstrap)
+    monkeypatch.setattr(cli, "run_elevated", lambda command: captured.update(command=command))
+
+    result = cli.install_startup(Namespace(interval=45.0, batch_size=300))
+
+    assert result == 0
+    assert captured["command"][0] == cli.sys.executable
+    assert "startup-install-admin" in captured["command"]
+    assert "--bootstrap-file" in captured["command"]
+    assert str(bootstrap) in captured["command"]
+    assert "--interval" in captured["command"]
+    assert "45.0" in captured["command"]
+    assert "--batch-size" in captured["command"]
+    assert "300" in captured["command"]
+    assert bootstrap.exists()
+    bootstrap.unlink()

@@ -347,7 +347,7 @@ def test_windows_lock_modes_use_shared_status_and_exclusive_worker_locks(
     assert background._try_acquire_status_lock(tmp_path) is None
     fake_release(worker)
 
-    assert requested_modes == [True, True, True, False, False, True, False]
+    assert requested_modes == [True, True, True, False, False, True]
 
 def test_event_workspace_sidebar_items_are_interactive():
     from pathlib import Path
@@ -508,3 +508,15 @@ def test_start_worker_rejects_unrelated_windows_worker_pid(
     finally:
         if held:
             held.pop().close()
+
+
+def test_user_worker_is_blocked_when_system_wide_task_is_installed(monkeypatch):
+    from basesentinel_agent import background
+    from basesentinel_windows import startup
+
+    monkeypatch.setattr(background.os, "name", "nt")
+    monkeypatch.setenv("BASESENTINEL_AGENT_SCOPE", "user")
+    monkeypatch.setattr(startup, "is_system_boot_task", lambda _name: True)
+
+    with pytest.raises(RuntimeError, match="system-wide BaseSentinel collector"):
+        background.start_background_worker()
