@@ -182,6 +182,24 @@ def remove_task(task_name: str) -> bool:
     return True
 
 
+def end_task(task_name: str) -> bool:
+    """End a currently running task without removing or disabling it."""
+    _require_windows()
+    if not task_exists(task_name):
+        return False
+    _run_schtasks(["/End", "/TN", task_name])
+    return True
+
+
+def disable_task(task_name: str) -> bool:
+    """Disable a registered task without deleting its definition."""
+    _require_windows()
+    if not task_exists(task_name):
+        return False
+    _run_schtasks(["/Change", "/TN", task_name, "/Disable"])
+    return True
+
+
 def run_task(task_name: str) -> None:
     """Start a registered task now, without waiting for the next user logon."""
     _require_windows()
