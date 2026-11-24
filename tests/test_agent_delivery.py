@@ -146,6 +146,39 @@ def test_failed_delivery_stays_in_local_queue(monkeypatch, tmp_path, capsys):
     assert "HTTP 503" in capsys.readouterr().out
 
 
+def test_collection_pipeline_continues_when_security_log_is_inaccessible(
+    monkeypatch, tmp_path, capsys
+):
+    from basesentinel_agent import cli
+
+    queue = EventQueue(tmp_path / "events.sqlite3")
+    payload = _event()
+    delivered = []
+
+    class FakeClient:
+        def send_event(self, event):
+            delivered.append(event)
+            return {"event_uid": event["event_uid"]}
+
+    def denied(_checkpoint):
+        raise RuntimeError("permission denied")
+
+    monkeypatch.setattr(cli, "collect_security_events", denied)
+    monkeypatch.setattr(
+        cli,
+        "collect_defender_events",
+        lambda _checkpoint: ([payload], 77),
+    )
+
+    result = cli._collect_and_send(FakeClient(), queue, batch_size=50)
+
+    assert result == (1, 1, 0, 0)
+    assert delivered == [payload]
+    assert queue.security_checkpoint() == 0
+    assert queue.defender_checkpoint() == 77
+    assert "Windows Security telemetry unavailable: permission denied" in capsys.readouterr().out
+
+
 def test_security_log_permission_error_is_not_reported_as_empty(monkeypatch):
     from basesentinel_agent import windows_eventlog
 

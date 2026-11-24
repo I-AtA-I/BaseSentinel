@@ -590,24 +590,20 @@ def test_ensure_pnp_audit_activity_skips_when_already_enabled(monkeypatch):
     assert calls[0][0] == "auditpol.exe"
 
 
-def test_ensure_pnp_audit_activity_requests_elevation_and_verifies(monkeypatch):
+def test_ensure_pnp_audit_activity_does_not_request_elevation(monkeypatch):
     from basesentinel_agent import windows_eventlog
 
     monkeypatch.setattr(windows_eventlog.os, "name", "nt")
     calls = []
 
     def fake_run(args, **kwargs):
-        calls.append(args)
-        if args[0] == "auditpol.exe":
-            output = "Plug and Play Events,Success" if len(calls) > 1 else "Plug and Play Events,No Auditing"
-            return subprocess.CompletedProcess(args, 0, output, "")
-        return subprocess.CompletedProcess(args, 0, "", "")
+        calls.append((args, kwargs))
+        return subprocess.CompletedProcess(args, 0, "Plug and Play Events,No Auditing", "")
 
     monkeypatch.setattr(windows_eventlog.subprocess, "run", fake_run)
 
-    assert windows_eventlog.ensure_pnp_audit_activity() == "enabled"
-    assert len(calls) == 3
-    assert calls[1][0] == "powershell.exe"
-    assert "-Verb RunAs" in calls[1][-1]
-    assert "/success:enable" in calls[1][-1]
+    assert windows_eventlog.ensure_pnp_audit_activity() == "requires-admin"
+    assert len(calls) == 1
+    assert calls[0][0][0] == "auditpol.exe"
+    assert calls[0][1]["creationflags"] == getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
