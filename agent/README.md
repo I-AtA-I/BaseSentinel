@@ -4,8 +4,9 @@ The Windows endpoint agent can run as a single, machine-wide collector under the
 
 ## Requirements
 
-- Windows 10/11 or Windows Server with PowerShell and access to the Windows Security event log.
-- Python 3.12+.
+- Windows 10/11 or Windows Server with Task Scheduler and PowerShell.
+- Python 3.12+ installed on the device.
+- Administrator approval for the system-wide startup installation.
 - A BaseSentinel server reachable over HTTPS (plain HTTP is accepted only for localhost development).
 
 ## Install
@@ -109,7 +110,7 @@ basesentinel-agent-gui
 
 Use either the one-time invitation link or the invitation code plus the server URL. The current invitation workflow does not require a Server ID, server access code, or connection password. The client exchanges the invitation for an individual agent credential and stores it using Windows DPAPI.
 
-The GUI is packaged as a windowed Windows application so launching it does not open an extra console. **Start background** launches the separate windowless collector; you can close the GUI and the collector continues. Reopen the GUI to inspect its status and activity log, or use **Stop agent** to request a clean shutdown. Automatic startup is configured separately with the CLI commands above and requires Administrator approval.
+The GUI is packaged as a windowed Windows application so launching it does not open an extra console. **Start background** launches a per-user windowless collector when system-wide startup has not been installed. Once the machine-wide task is installed, a separate per-user collector is blocked to avoid duplicate event collection. Use the CLI startup-status and stop commands to inspect or stop the system-wide task. Automatic startup is configured separately with the CLI commands above and requires Administrator approval.
 
 ## Enrollment policy
 
