@@ -52,7 +52,12 @@ def system_runtime_dir() -> Path:
     return product_root() / _RUNTIME_NAME
 
 
-def _run_icacls(path: Path, *, users_read_only: bool) -> None:
+def _run_icacls(
+    path: Path,
+    *,
+    users_read_only: bool,
+    recursive: bool = True,
+) -> None:
     arguments = [
         "icacls.exe",
         str(path),
@@ -63,7 +68,8 @@ def _run_icacls(path: Path, *, users_read_only: bool) -> None:
     ]
     if users_read_only:
         arguments.append("*S-1-5-32-545:(OI)(CI)(RX)")
-    arguments.extend(["/T", "/C"])
+    if recursive:
+        arguments.append("/T")
 
     try:
         result = subprocess.run(
@@ -86,11 +92,14 @@ def _run_icacls(path: Path, *, users_read_only: bool) -> None:
 
 
 
-def _set_system_owner(path: Path) -> None:
+def _set_system_owner(path: Path, *, recursive: bool = True) -> None:
     """Make SYSTEM the owner so an unelevated user cannot rewrite protected files."""
+    command = ["icacls.exe", str(path), "/setowner", "*S-1-5-18"]
+    if recursive:
+        command.append("/T")
     try:
         result = subprocess.run(
-            ["icacls.exe", str(path), "/setowner", "*S-1-5-18", "/T"],
+            command,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -269,9 +278,12 @@ def install_system_agent(
     data_dir = machine_data_dir()
     runtime_dir = system_runtime_dir()
     root.mkdir(parents=True, exist_ok=True)
+    _run_icacls(root, users_read_only=True, recursive=False)
+    _set_system_owner(root, recursive=False)
+
+    # Never recursively grant Users access to the product root: the Data
+    # directory contains a machine-DPAPI credential and queued security events.
     data_dir.mkdir(parents=True, exist_ok=True)
-    _run_icacls(root, users_read_only=True)
-    _set_system_owner(root)
     _run_icacls(data_dir, users_read_only=False)
     _set_system_owner(data_dir)
 
