@@ -106,9 +106,16 @@ def _run_icacls(
 
 
 
-def _set_system_owner(path: Path, *, recursive: bool = True) -> None:
-    """Make SYSTEM the owner so an unelevated user cannot rewrite protected files."""
-    command = ["icacls.exe", str(path), "/setowner", "*S-1-5-18"]
+def _set_admin_owner(path: Path, *, recursive: bool = True) -> None:
+    """Make the Administrators group the owner so standard users cannot rewrite files."""
+    from basesentinel_windows.startup import windows_system_executable
+
+    command = [
+        windows_system_executable("icacls.exe"),
+        str(path),
+        "/setowner",
+        "*S-1-5-32-544",
+    ]
     if recursive:
         command.append("/T")
     try:
@@ -121,12 +128,12 @@ def _set_system_owner(path: Path, *, recursive: bool = True) -> None:
             check=False,
         )
     except OSError as exc:
-        raise RuntimeError(f"Could not set SYSTEM ownership on {path}: {exc}") from exc
+        raise RuntimeError(f"Could not set Administrators ownership on {path}: {exc}") from exc
 
     if result.returncode != 0:
         details = (result.stderr or result.stdout).strip()[-800:]
         raise RuntimeError(
-            f"Could not set SYSTEM ownership on {path}."
+            f"Could not set Administrators ownership on {path}."
             + (f" Details: {details}" if details else "")
         )
 
@@ -314,11 +321,11 @@ def install_system_agent(
     # Data directory contains a machine-DPAPI credential and queued events.
     data_dir.mkdir(parents=True, exist_ok=True)
     _run_icacls(data_dir, users_read_only=False)
-    _set_system_owner(data_dir)
+    _set_admin_owner(data_dir)
 
     # Do not recursively grant Users access to the product root.
     _run_icacls(root, users_read_only=True, recursive=False)
-    _set_system_owner(root, recursive=False)
+    _set_admin_owner(root, recursive=False)
 
     staging = Path(tempfile.mkdtemp(prefix=".Runtime-staging-", dir=root))
     backup: Path | None = None
@@ -326,7 +333,7 @@ def install_system_agent(
     try:
         _copy_runtime(staging)
         _run_icacls(staging, users_read_only=True)
-        _set_system_owner(staging)
+        _set_admin_owner(staging)
 
         if task_exists(_TASK_NAME):
             # The old per-user task may exist from an earlier agent version.

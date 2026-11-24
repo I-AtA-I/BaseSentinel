@@ -98,3 +98,49 @@ def test_admin_bootstrap_uses_machine_dpapi_and_restricts_temp_file(
 def test_system_entry_point_selects_machine_scope():
     assert 'BASESENTINEL_AGENT_SCOPE"] = "machine"' in system_install._SYSTEM_ENTRY_POINT
     assert "startup-service-run" in system_install._SYSTEM_ENTRY_POINT
+
+
+def test_admin_owner_uses_administrators_group_and_system32_tool(monkeypatch, tmp_path):
+    captured = {}
+    monkeypatch.setattr(
+        "basesentinel_windows.startup.windows_system_executable",
+        lambda name: rf"C:\Windows\System32\{name}",
+    )
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(system_install.subprocess, "run", fake_run)
+
+    target = tmp_path / "Runtime"
+    system_install._set_admin_owner(target)
+
+    assert captured["command"] == [
+        r"C:\Windows\System32\icacls.exe",
+        str(target),
+        "/setowner",
+        "*S-1-5-32-544",
+        "/T",
+    ]
+
+
+def test_admin_owner_can_be_applied_to_directory_without_recursion(monkeypatch, tmp_path):
+    captured = {}
+    monkeypatch.setattr(
+        "basesentinel_windows.startup.windows_system_executable",
+        lambda name: rf"C:\Windows\System32\{name}",
+    )
+    monkeypatch.setattr(
+        system_install.subprocess,
+        "run",
+        lambda command, **kwargs: (
+            captured.update(command=command)
+            or subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        ),
+    )
+
+    system_install._set_admin_owner(tmp_path, recursive=False)
+
+    assert captured["command"][-1] == "*S-1-5-32-544"
+    assert "/T" not in captured["command"]
