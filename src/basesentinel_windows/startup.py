@@ -191,7 +191,7 @@ def task_exists(task_name: str) -> bool:
     _require_windows()
     try:
         result = subprocess.run(
-            ["schtasks.exe", "/Query", "/TN", task_name],
+            [windows_system_executable("schtasks.exe"), "/Query", "/TN", task_name],
             capture_output=True,
             text=True,
             check=False,
