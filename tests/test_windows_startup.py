@@ -107,8 +107,8 @@ def test_logon_task_query_and_remove(monkeypatch):
 
     monkeypatch.setattr(startup.subprocess, "run", fake_run)
 
-    assert startup.logon_task_exists("BaseSentinel Agent") is True
-    assert startup.remove_logon_task("BaseSentinel Agent") is True
+    assert startup.task_exists("BaseSentinel Agent") is True
+    assert startup.remove_task("BaseSentinel Agent") is True
     assert calls[0][:4] == ["schtasks.exe", "/Query", "/TN", "BaseSentinel Agent"]
     assert calls[1][:4] == ["schtasks.exe", "/Delete", "/TN", "BaseSentinel Agent"]
 
