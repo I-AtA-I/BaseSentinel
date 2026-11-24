@@ -32,14 +32,23 @@ def build_logon_task_xml(
     description: str = "",
     restart_on_failure: bool = False,
     username: str | None = None,
+    trigger: str = "logon",
+    service_account: bool = False,
 ) -> str:
-    """Build a per-user Task Scheduler definition that starts at interactive logon."""
+    """Build a logon task or a system-start task for Windows Task Scheduler."""
     if not task_name.strip():
         raise ValueError("Task name must not be empty.")
     if not command or not str(command[0]).strip():
         raise ValueError("Task command must contain an executable.")
 
-    user = username or _current_user()
+    if trigger not in {"logon", "boot"}:
+        raise ValueError("Task trigger must be 'logon' or 'boot'.")
+    if service_account and trigger != "boot":
+        raise ValueError("A service account can only be used with a boot trigger.")
+    if trigger == "boot" and not service_account:
+        raise ValueError("A boot task must run under a Windows service account.")
+
+    user = "SYSTEM" if service_account else (username or _current_user())
     root = ET.Element(_tag("Task"), {"version": "1.4"})
 
     registration = ET.SubElement(root, _tag("RegistrationInfo"))
@@ -47,15 +56,23 @@ def build_logon_task_xml(
     ET.SubElement(registration, _tag("Description")).text = description or task_name
 
     triggers = ET.SubElement(root, _tag("Triggers"))
-    trigger = ET.SubElement(triggers, _tag("LogonTrigger"))
-    ET.SubElement(trigger, _tag("Enabled")).text = "true"
-    ET.SubElement(trigger, _tag("UserId")).text = user
+    if trigger == "logon":
+        trigger_element = ET.SubElement(triggers, _tag("LogonTrigger"))
+        ET.SubElement(trigger_element, _tag("Enabled")).text = "true"
+        ET.SubElement(trigger_element, _tag("UserId")).text = user
+    else:
+        trigger_element = ET.SubElement(triggers, _tag("BootTrigger"))
+        ET.SubElement(trigger_element, _tag("Enabled")).text = "true"
 
     principals = ET.SubElement(root, _tag("Principals"))
     principal = ET.SubElement(principals, _tag("Principal"), {"id": "Author"})
     ET.SubElement(principal, _tag("UserId")).text = user
-    ET.SubElement(principal, _tag("LogonType")).text = "InteractiveToken"
-    ET.SubElement(principal, _tag("RunLevel")).text = "LeastPrivilege"
+    ET.SubElement(principal, _tag("LogonType")).text = (
+        "ServiceAccount" if service_account else "InteractiveToken"
+    )
+    ET.SubElement(principal, _tag("RunLevel")).text = (
+        "HighestAvailable" if service_account else "LeastPrivilege"
+    )
 
     settings = ET.SubElement(root, _tag("Settings"))
     ET.SubElement(settings, _tag("MultipleInstancesPolicy")).text = "IgnoreNew"
@@ -179,3 +196,45 @@ def run_logon_task(task_name: str) -> None:
     """Start a registered task now, without waiting for the next logon."""
     _require_windows()
     _run_schtasks(["/Run", "/TN", task_name])
+
+
+
+def register_boot_task(
+    task_name: str,
+    command: Sequence[str],
+    *,
+    working_directory: str | Path | None = None,
+    description: str = "",
+    restart_on_failure: bool = False,
+) -> None:
+    """Register a task that starts with Windows under the LocalSystem account."""
+    _require_windows()
+    xml_content = build_logon_task_xml(
+        task_name,
+        command,
+        working_directory=working_directory,
+        description=description,
+        restart_on_failure=restart_on_failure,
+        trigger="boot",
+        service_account=True,
+    )
+
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            suffix=".xml",
+            prefix="basesentinel-boot-task-",
+            delete=False,
+        ) as stream:
+            stream.write(xml_content)
+            temporary_path = Path(stream.name)
+
+        _run_schtasks(["/Create", "/TN", task_name, "/XML", str(temporary_path), "/F"])
+    finally:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink()
+            except OSError:
+                pass
