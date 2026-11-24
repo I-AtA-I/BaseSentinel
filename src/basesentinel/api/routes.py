@@ -807,6 +807,15 @@ def delete_all_events():
             )
             .values(source_event_id=None)
         ).rowcount or 0
+        # Correlated activities are retained as historical summaries, but their
+        # join rows must be removed before deleting the referenced source events.
+        db.session.execute(
+            delete(CorrelatedActivityEvent).where(
+                CorrelatedActivityEvent.event_id.in_(
+                    select(SecurityEvent.id)
+                )
+            )
+        )
         deleted_events = db.session.execute(
             delete(SecurityEvent)
         ).rowcount or 0
@@ -830,6 +839,9 @@ def delete_all_security_data():
     """Delete all alerts and security events in one transaction."""
     try:
         deleted_alerts = db.session.execute(delete(Alert)).rowcount or 0
+        # Remove activity-to-event links before deleting source events; keep the
+        # correlated activity summaries and all endpoint inventory intact.
+        db.session.execute(delete(CorrelatedActivityEvent))
         deleted_events = db.session.execute(delete(SecurityEvent)).rowcount or 0
         db.session.commit()
     except Exception:

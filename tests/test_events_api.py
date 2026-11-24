@@ -6,7 +6,10 @@ import pytest
 
 from basesentinel import create_app, db
 from basesentinel.core.security import generate_agent_token, hash_agent_token
-from basesentinel.models import Agent, AgentCredential, Alert, Asset, SecurityEvent
+from basesentinel.models import (
+    Agent, AgentCredential, Alert, Asset, CorrelatedActivity,
+    CorrelatedActivityEvent, SecurityEvent,
+)
 from basesentinel.models.base import utcnow_naive
 from basesentinel.services.detection import DetectionService
 from basesentinel.services.events import EventIngestionService
@@ -294,6 +297,21 @@ def create_alert_backed_event(agent):
 def test_admin_can_flush_events_and_preserve_detached_alerts(client, agent):
     token = create_admin_token(client)
     event, alert = create_alert_backed_event(agent)
+    activity = CorrelatedActivity(
+        agent_id=agent["id"],
+        activity_type="account_activity",
+        correlation_key="test-account",
+        title="Test correlated activity",
+        summary="Historical activity summary",
+        context={},
+        occurrence_count=1,
+        first_seen_at=utcnow_naive(),
+        last_seen_at=utcnow_naive(),
+    )
+    db.session.add(activity)
+    db.session.flush()
+    db.session.add(CorrelatedActivityEvent(activity_id=activity.id, event_id=event.id))
+    db.session.commit()
 
     response = client.delete(
         "/api/v1/events",
@@ -309,6 +327,9 @@ def test_admin_can_flush_events_and_preserve_detached_alerts(client, agent):
     stored_alert = db.session.get(Alert, alert.id)
     assert stored_alert is not None
     assert stored_alert.source_event_id is None
+    stored_activity = db.session.get(CorrelatedActivity, activity.id)
+    assert stored_activity is not None
+    assert stored_activity.source_events == []
 
     listed = client.get(
         "/api/v1/alerts",
