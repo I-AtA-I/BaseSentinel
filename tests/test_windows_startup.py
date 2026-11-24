@@ -89,7 +89,7 @@ def test_register_logon_task_writes_xml_then_calls_schtasks(monkeypatch, tmp_pat
     )
 
     assert captured["xml_bytes"].startswith(b"\\xff\\xfe")
-    assert b"encoding='utf-16'" in captured["xml_bytes"].lower()
+    assert "encoding='utf-16'" in captured["xml_bytes"].decode("utf-16").lower()
     assert captured["arguments"][:3] == ["/Create", "/TN", "BaseSentinel Agent"]
     assert captured["xml"].findtext("task:Actions/task:Exec/task:Command", namespaces=_NAMESPACE) == r"C:\Python\pythonw.exe"
     xml_path = captured["arguments"][captured["arguments"].index("/XML") + 1]
