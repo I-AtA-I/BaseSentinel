@@ -27,7 +27,7 @@ basesentinel-server run
 The defaults are `127.0.0.1:5000` and eight Waitress threads. The server writes its log to:
 
 ```text
-%LOCALAPPDATA%\BaseSentinel\Logs\server.log
+%PROGRAMDATA%\BaseSentinel\Logs\server.log
 ```
 
 The default host is loopback-only. This is intentional: do not expose the application directly to the public internet. When remote endpoints need to connect, place the server behind a correctly configured HTTPS reverse proxy and configure the proxy/network access deliberately. For a trusted LAN deployment behind an HTTPS proxy, the listener can be bound to all interfaces:
@@ -38,14 +38,14 @@ basesentinel-server run --host 0.0.0.0 --port 5000
 
 ## Start automatically after Windows sign-in
 
-From the directory containing the `.env` file, register a hidden Task Scheduler task for the current Windows user:
+From an **Administrator PowerShell** opened in the directory containing the `.env` file, register a hidden Task Scheduler task:
 
 ```powershell
 basesentinel-server startup-install --host 127.0.0.1 --port 5000
 basesentinel-server startup-status
 ```
 
-The task starts the server when that user signs in. It uses the same working directory so the existing `.env` file is loaded. The task is configured to retry a server process that exits unexpectedly. The command also asks Task Scheduler to start the server immediately.
+The task starts the server at Windows boot, before an interactive user signs in. It runs as the built-in LocalSystem account, uses the same working directory so the existing `.env` file is loaded, and retries a server process that exits unexpectedly. The command also asks Task Scheduler to start the server immediately. Administrative privileges are required to register or remove this system-start task.
 
 Remove the automatic startup task with:
 
@@ -53,7 +53,7 @@ Remove the automatic startup task with:
 basesentinel-server startup-remove
 ```
 
-Removing the task does not stop a server process that is already running. The server runs in the signed-in user's session; this is not a Windows service and it does not start before sign-in.
+Removing the task does not stop a server process that is already running. The task runs under LocalSystem at boot; the server is still an ordinary Waitress process managed by Task Scheduler, not a registered Windows service.
 
 ## Database and network notes
 
