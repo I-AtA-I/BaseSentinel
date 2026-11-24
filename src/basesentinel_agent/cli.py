@@ -429,7 +429,7 @@ def install_startup(args) -> int:
                 executable,
                 "-m",
                 "basesentinel_agent.cli",
-                "start",
+                "startup-run",
                 "--interval",
                 str(args.interval),
                 "--batch-size",
@@ -459,6 +459,27 @@ def install_startup(args) -> int:
     print("Automatic startup is enabled for the current Windows user.")
     print("The collector runs independently; the endpoint GUI is not required.")
     return 0
+
+
+def startup_launch(args) -> int:
+    """Launch the detached worker silently from the Windows logon task."""
+    try:
+        AgentConfigStore().load()
+        if not background_status()["running"]:
+            start_background_worker(
+                batch_size=args.batch_size,
+                interval=args.interval,
+            )
+        return 0
+    except (RuntimeError, ValueError, OSError) as exc:
+        try:
+            log_path = default_data_dir() / "agent.log"
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            with log_path.open("a", encoding="utf-8") as stream:
+                stream.write(f"Automatic startup failed: {exc}\\n")
+        except OSError:
+            pass
+        return 1
 
 
 def remove_startup(args) -> int:
@@ -579,6 +600,14 @@ def build_parser() -> argparse.ArgumentParser:
     startup_install_parser.add_argument("--interval", type=_positive_interval, default=60.0)
     startup_install_parser.add_argument("--batch-size", type=_batch_size, default=500)
     startup_install_parser.set_defaults(handler=install_startup)
+
+    startup_run_parser = commands.add_parser(
+        "startup-run",
+        help=argparse.SUPPRESS,
+    )
+    startup_run_parser.add_argument("--interval", type=_positive_interval, default=60.0)
+    startup_run_parser.add_argument("--batch-size", type=_batch_size, default=500)
+    startup_run_parser.set_defaults(handler=startup_launch)
 
     startup_remove_parser = commands.add_parser(
         "startup-remove",
