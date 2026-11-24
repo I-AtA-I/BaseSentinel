@@ -14,6 +14,8 @@ from basesentinel_windows.startup import (
     register_logon_task,
     remove_task,
     run_task,
+    disable_task,
+    end_task,
 )
 
 
@@ -158,6 +160,40 @@ def remove_startup(args) -> int:
     return 0
 
 
+def stop_server(args) -> int:
+    """Stop the currently running server task without changing its logon trigger."""
+    if not _port_is_listening(args.host, args.port):
+        print(f"BaseSentinel server is already stopped (TCP port {args.port} is not accepting connections).")
+        return 0
+    try:
+        if not task_exists(_TASK_NAME):
+            print("The server is accepting connections, but its automatic-start task is not registered.")
+            print("This command can stop the Task Scheduler instance only.")
+            return 1
+        end_task(_TASK_NAME)
+    except RuntimeError as exc:
+        print(f"Could not stop BaseSentinel server: {exc}")
+        return 1
+    print("Windows Task Scheduler was asked to stop the BaseSentinel server.")
+    print("Automatic startup after sign-in remains enabled.")
+    return 0
+
+
+def stop_automatic_startup(args) -> int:
+    """Disable the logon task while leaving a running server untouched."""
+    try:
+        disabled = disable_task(_TASK_NAME)
+    except RuntimeError as exc:
+        print(f"Could not disable BaseSentinel server automatic startup: {exc}")
+        return 1
+    if disabled:
+        print("BaseSentinel server automatic startup has been disabled.")
+        print("A server process that is already running has not been stopped.")
+    else:
+        print("BaseSentinel server automatic startup is not installed.")
+    return 0
+
+
 def startup_status(args) -> int:
     try:
         installed = task_exists(_TASK_NAME)
@@ -185,13 +221,15 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument(
         "--host",
         default=os.getenv("BASESENTINEL_SERVER_HOST", "127.0.0.1"),
+        help="Interface address to bind (default: 127.0.0.1).",
     )
     run_parser.add_argument(
         "--port",
         type=int,
         default=int(os.getenv("BASESENTINEL_SERVER_PORT", "5000")),
+        help="TCP port to listen on (default: 5000).",
     )
-    run_parser.add_argument("--threads", type=int, default=8)
+    run_parser.add_argument("--threads", type=int, default=8, help="Waitress worker threads (default: 8).")
     run_parser.set_defaults(handler=run_server)
 
     install_parser = commands.add_parser(
@@ -201,13 +239,15 @@ def build_parser() -> argparse.ArgumentParser:
     install_parser.add_argument(
         "--host",
         default=os.getenv("BASESENTINEL_SERVER_HOST", "127.0.0.1"),
+        help="Interface address to bind (default: 127.0.0.1).",
     )
     install_parser.add_argument(
         "--port",
         type=int,
         default=int(os.getenv("BASESENTINEL_SERVER_PORT", "5000")),
+        help="TCP port to listen on (default: 5000).",
     )
-    install_parser.add_argument("--threads", type=int, default=8)
+    install_parser.add_argument("--threads", type=int, default=8, help="Waitress worker threads (default: 8).")
     install_parser.set_defaults(handler=install_startup)
 
     remove_parser = commands.add_parser(
@@ -215,6 +255,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Remove the server's automatic Windows startup task.",
     )
     remove_parser.set_defaults(handler=remove_startup)
+
+    stop_parser = commands.add_parser(
+        "stop",
+        help="Stop the currently running server without disabling automatic startup.",
+    )
+    stop_parser.add_argument(
+        "--host",
+        default=os.getenv("BASESENTINEL_SERVER_HOST", "127.0.0.1"),
+        help="Server host used to check whether the server is running.",
+    )
+    stop_parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.getenv("BASESENTINEL_SERVER_PORT", "5000")),
+        help="Server port used to check whether the server is running.",
+    )
+    stop_parser.set_defaults(handler=stop_server)
+
+    startup_stop_parser = commands.add_parser(
+        "startup-stop",
+        help="Disable automatic server startup after Windows sign-in.",
+    )
+    startup_stop_parser.set_defaults(handler=stop_automatic_startup)
 
     status_parser = commands.add_parser(
         "startup-status",
