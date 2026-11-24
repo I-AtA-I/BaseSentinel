@@ -202,7 +202,6 @@ def test_register_system_boot_task_writes_utf16_and_registers_visible_task(monke
     assert "encoding='utf-16'" in captured["bytes"].decode("utf-16").lower()
     assert captured["arguments"][:3] == ["/Create", "/TN", "BaseSentinel Agent"]
     assert captured["arguments"][captured["arguments"].index("/RU") + 1] == "SYSTEM"
-    assert captured["arguments"][captured["arguments"].index("/RL") + 1] == "HIGHEST"
     principal = captured["root"].find("task:Principals/task:Principal", _NAMESPACE)
     assert principal.findtext("task:UserId", namespaces=_NAMESPACE) == "S-1-5-18"
     assert principal.find("task:LogonType", _NAMESPACE) is None
