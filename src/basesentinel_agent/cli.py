@@ -443,6 +443,14 @@ def stop_background(args) -> int:
 
 
 def background_status_command(args) -> int:
+    if is_system_boot_task(_STARTUP_TASK_NAME):
+        from basesentinel_agent.system_install import machine_data_dir
+
+        print("System-wide automatic collector: installed for all Windows users")
+        print("Run account: Windows LocalSystem (SYSTEM)")
+        print(f"Agent log: {machine_data_dir() / 'agent.log'}")
+        return 0
+
     state = background_status()
     if state["running"]:
         pid = state["pid"] if state["pid"] is not None else "unknown"
@@ -666,6 +674,13 @@ def identity(args) -> int:
     client = _client_from_config()
     result = client.identity()
     print(f"Agent {result['agent_id']}: {result['status']}")
+    if is_system_boot_task(_STARTUP_TASK_NAME):
+        from basesentinel_agent.system_install import machine_data_dir
+
+        print("Collector startup: installed for all Windows users (SYSTEM)")
+        print(f"Agent log: {machine_data_dir() / 'agent.log'}")
+        return 0
+
     state = background_status()
     if state["running"]:
         print(f"Background worker: running (PID {state['pid'] or 'unknown'})")
