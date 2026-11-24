@@ -278,14 +278,16 @@ def install_system_agent(
     data_dir = machine_data_dir()
     runtime_dir = system_runtime_dir()
     root.mkdir(parents=True, exist_ok=True)
-    _run_icacls(root, users_read_only=True, recursive=False)
-    _set_system_owner(root, recursive=False)
 
-    # Never recursively grant Users access to the product root: the Data
-    # directory contains a machine-DPAPI credential and queued security events.
+    # Lock existing machine data before changing the product-root ACL. The
+    # Data directory contains a machine-DPAPI credential and queued events.
     data_dir.mkdir(parents=True, exist_ok=True)
     _run_icacls(data_dir, users_read_only=False)
     _set_system_owner(data_dir)
+
+    # Do not recursively grant Users access to the product root.
+    _run_icacls(root, users_read_only=True, recursive=False)
+    _set_system_owner(root, recursive=False)
 
     staging = Path(tempfile.mkdtemp(prefix=".Runtime-staging-", dir=root))
     backup: Path | None = None
