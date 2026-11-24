@@ -56,7 +56,7 @@ def _auditpol_success_enabled(output: str) -> bool:
 
 
 def ensure_pnp_audit_activity() -> str:
-    """Enable successful Plug and Play auditing, requesting UAC elevation if needed."""
+    """Inspect Plug and Play auditing without requesting elevation or changing policy."""
     if os.name != "nt":
         return "unsupported"
 
@@ -75,6 +75,7 @@ def ensure_pnp_audit_activity() -> str:
             errors="replace",
             timeout=15,
             check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise RuntimeError(f"Could not inspect Plug and Play audit policy: {exc}") from exc
@@ -88,58 +89,10 @@ def ensure_pnp_audit_activity() -> str:
     if _auditpol_success_enabled(current.stdout):
         return "already-enabled"
 
-    # Only the narrowly scoped auditpol command is elevated. The agent itself
-    # continues running as the enrolled Windows user.
-    command = (
-        "$p = Start-Process -FilePath "
-        '"$env:SystemRoot\\System32\\auditpol.exe" '
-        "-ArgumentList '/set /subcategory:"
-        + _PNP_AUDIT_SUBCATEGORY
-        + " /success:enable' -Verb RunAs -Wait -PassThru; "
-        "exit $p.ExitCode"
-    )
-    try:
-        elevated = subprocess.run(
-            ["powershell.exe", "-NoProfile", "-Command", command],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=120,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise RuntimeError(
-            f"Could not request administrator approval for Plug and Play auditing: {exc}"
-        ) from exc
+    # Collection must never trigger an unexpected UAC prompt or modify machine policy.
+    # An administrator can enable this narrowly scoped audit category separately.
+    return "requires-admin"
 
-    if elevated.returncode != 0:
-        detail = elevated.stderr.strip()[:300]
-        raise RuntimeError(
-            "Plug and Play auditing was not enabled. Approve the Windows "
-            "administrator prompt, or enable the policy with an administrator account."
-            + (f" Details: {detail}" if detail else "")
-        )
-
-    try:
-        verified = subprocess.run(
-            query,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=15,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise RuntimeError(f"Could not verify Plug and Play audit policy: {exc}") from exc
-
-    if verified.returncode != 0 or not _auditpol_success_enabled(verified.stdout):
-        raise RuntimeError(
-            "Windows did not confirm that successful Plug and Play auditing is enabled. "
-            "A domain policy may be overriding the local setting."
-        )
-    return "enabled"
 
 # The only interpolated value is a validated integer Windows EventRecordID.
 _POWERSHELL = r"""
@@ -234,6 +187,7 @@ def collect_security_events(last_record_id: int = 0) -> tuple[list[dict], int]:
             errors="replace",
             timeout=45,
             check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(
@@ -390,6 +344,7 @@ def collect_defender_events(last_record_id: int = 0) -> tuple[list[dict], int]:
             errors="replace",
             timeout=45,
             check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError("Reading the Windows Defender event log timed out.") from exc
