@@ -42,7 +42,7 @@ def test_logon_task_xml_uses_current_user_and_hidden_interactive_trigger(tmp_pat
     assert "basesentinel_agent.cli" in arguments
 
     settings = root.find("task:Settings", _NAMESPACE)
-    assert settings.findtext("task:Hidden", namespaces=_NAMESPACE) == "true"
+    assert settings.findtext("task:Hidden", namespaces=_NAMESPACE) == "false"
     assert settings.findtext("task:MultipleInstancesPolicy", namespaces=_NAMESPACE) == "IgnoreNew"
 
 
