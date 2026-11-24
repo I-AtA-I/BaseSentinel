@@ -10,10 +10,10 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from basesentinel_windows.startup import (
-    logon_task_exists,
+    task_exists,
     register_boot_task,
-    remove_logon_task,
-    run_logon_task,
+    remove_task,
+    run_task,
 )
 
 
@@ -135,7 +135,7 @@ def install_startup(args) -> int:
         print("The configured port is already accepting connections; the server was not started twice.")
     else:
         try:
-            run_logon_task(_TASK_NAME)
+            run_task(_TASK_NAME)
             print("Windows Task Scheduler was asked to start the server now.")
         except RuntimeError as exc:
             print(f"The startup task is installed, but could not be started now: {exc}")
@@ -145,7 +145,7 @@ def install_startup(args) -> int:
 
 def remove_startup(args) -> int:
     try:
-        removed = remove_logon_task(_TASK_NAME)
+        removed = remove_task(_TASK_NAME)
     except RuntimeError as exc:
         print(f"Could not remove BaseSentinel server automatic startup: {exc}")
         return 1
@@ -160,7 +160,7 @@ def remove_startup(args) -> int:
 
 def startup_status(args) -> int:
     try:
-        installed = logon_task_exists(_TASK_NAME)
+        installed = task_exists(_TASK_NAME)
     except RuntimeError as exc:
         print(f"Could not read BaseSentinel server startup status: {exc}")
         return 1
