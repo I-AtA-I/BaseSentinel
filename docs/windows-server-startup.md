@@ -38,7 +38,7 @@ basesentinel-server run --host 0.0.0.0 --port 5000
 
 ## Start automatically when Windows boots
 
-From an **Administrator PowerShell** opened in the directory containing the `.env` file, register a hidden Task Scheduler task:
+From an **Administrator PowerShell** opened in the directory containing the `.env` file, register a Task Scheduler boot task:
 
 ```powershell
 basesentinel-server startup-install --host 127.0.0.1 --port 5000
