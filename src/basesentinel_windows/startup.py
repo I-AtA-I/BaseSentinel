@@ -24,7 +24,7 @@ def _current_user() -> str:
     return f"{domain}\\{username}" if domain else username
 
 
-def build_logon_task_xml(
+def build_startup_task_xml(
     task_name: str,
     command: Sequence[str],
     *,
@@ -140,7 +140,7 @@ def register_logon_task(
 ) -> None:
     """Register a hidden per-user task that runs after the current user signs in."""
     _require_windows()
-    xml_content = build_logon_task_xml(
+    xml_content = build_startup_task_xml(
         task_name,
         command,
         working_directory=working_directory,
@@ -209,7 +209,7 @@ def register_boot_task(
 ) -> None:
     """Register a task that starts with Windows under the LocalSystem account."""
     _require_windows()
-    xml_content = build_logon_task_xml(
+    xml_content = build_startup_task_xml(
         task_name,
         command,
         working_directory=working_directory,
