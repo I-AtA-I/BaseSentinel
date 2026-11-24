@@ -27,7 +27,7 @@ basesentinel-server run
 The defaults are `127.0.0.1:5000` and eight Waitress threads. The server writes its log to:
 
 ```text
-%PROGRAMDATA%\BaseSentinel\Logs\server.log
+%LOCALAPPDATA%\BaseSentinel\Logs\server.log
 ```
 
 The default host is loopback-only. This is intentional: do not expose the application directly to the public internet. When remote endpoints need to connect, place the server behind a correctly configured HTTPS reverse proxy and configure the proxy/network access deliberately. For a trusted LAN deployment behind an HTTPS proxy, the listener can be bound to all interfaces:
