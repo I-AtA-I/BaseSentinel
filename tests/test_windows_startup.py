@@ -9,8 +9,8 @@ from basesentinel_windows import startup
 _NAMESPACE = {"task": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
 
 
-def test_logon_task_xml_uses_current_user_and_hidden_interactive_trigger(tmp_path):
-    xml_text = startup.build_logon_task_xml(
+def test_logon_task_xml_uses_current_user_and_visible_interactive_trigger(tmp_path):
+    xml_text = startup.build_startup_task_xml(
         "BaseSentinel Agent",
         [
             r"C:\Program Files\Python\pythonw.exe",
@@ -47,7 +47,7 @@ def test_logon_task_xml_uses_current_user_and_hidden_interactive_trigger(tmp_pat
 
 
 def test_server_task_can_be_configured_to_restart_after_failure(tmp_path):
-    xml_text = startup.build_logon_task_xml(
+    xml_text = startup.build_startup_task_xml(
         "BaseSentinel Server",
         [r"C:\Python\pythonw.exe", "-m", "basesentinel.server", "run"],
         working_directory=tmp_path,
@@ -64,7 +64,7 @@ def test_server_task_can_be_configured_to_restart_after_failure(tmp_path):
 
 def test_logon_task_rejects_empty_commands():
     with pytest.raises(ValueError, match="executable"):
-        startup.build_logon_task_xml("BaseSentinel", [], username="operator")
+        startup.build_startup_task_xml("BaseSentinel", [], username="operator")
 
 
 def test_register_logon_task_writes_xml_then_calls_schtasks(monkeypatch, tmp_path):
@@ -115,7 +115,7 @@ def test_logon_task_query_and_remove(monkeypatch):
 
 
 def test_boot_task_uses_system_account_and_boot_trigger(tmp_path):
-    xml_text = startup.build_logon_task_xml(
+    xml_text = startup.build_startup_task_xml(
         "BaseSentinel Server",
         [r"C:\Python\pythonw.exe", "-m", "basesentinel.server", "run"],
         working_directory=tmp_path,
@@ -137,7 +137,7 @@ def test_boot_task_uses_system_account_and_boot_trigger(tmp_path):
 
 def test_boot_task_requires_service_account():
     with pytest.raises(ValueError, match="service account"):
-        startup.build_logon_task_xml(
+        startup.build_startup_task_xml(
             "BaseSentinel Server",
             ["python.exe", "-m", "basesentinel.server", "run"],
             trigger="boot",
