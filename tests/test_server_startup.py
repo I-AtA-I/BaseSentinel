@@ -46,7 +46,7 @@ def test_server_startup_registers_background_task(monkeypatch, tmp_path):
     monkeypatch.setattr(server, "_port_is_listening", lambda _host, _port: False)
     monkeypatch.setattr(
         server,
-        "register_boot_task",
+        "register_logon_task",
         lambda name, command, **kwargs: captured.append((name, command, kwargs)),
     )
     monkeypatch.setattr(server, "run_task", lambda name: captured.append(("run", name)))
