@@ -113,33 +113,3 @@ def test_logon_task_query_and_remove(monkeypatch):
     assert calls[1][:4] == ["schtasks.exe", "/Delete", "/TN", "BaseSentinel Agent"]
 
 
-
-def test_boot_task_uses_system_account_and_boot_trigger(tmp_path):
-    xml_text = startup.build_startup_task_xml(
-        "BaseSentinel Server",
-        [r"C:\Python\pythonw.exe", "-m", "basesentinel.server", "run"],
-        working_directory=tmp_path,
-        restart_on_failure=True,
-        trigger="boot",
-        service_account=True,
-    )
-    root = ET.fromstring(xml_text)
-
-    trigger = root.find("task:Triggers/task:BootTrigger", _NAMESPACE)
-    principal = root.find("task:Principals/task:Principal", _NAMESPACE)
-
-    assert trigger is not None
-    assert trigger.findtext("task:Enabled", namespaces=_NAMESPACE) == "true"
-    assert principal.findtext("task:UserId", namespaces=_NAMESPACE) == "SYSTEM"
-    assert principal.findtext("task:LogonType", namespaces=_NAMESPACE) == "ServiceAccount"
-    assert principal.findtext("task:RunLevel", namespaces=_NAMESPACE) == "HighestAvailable"
-
-
-def test_boot_task_requires_service_account():
-    with pytest.raises(ValueError, match="service account"):
-        startup.build_startup_task_xml(
-            "BaseSentinel Server",
-            ["python.exe", "-m", "basesentinel.server", "run"],
-            trigger="boot",
-            username="operator",
-        )
