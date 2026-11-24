@@ -128,7 +128,9 @@ def _set_admin_owner(path: Path, *, recursive: bool = True) -> None:
             check=False,
         )
     except OSError as exc:
-        raise RuntimeError(f"Could not set Administrators ownership on {path}: {exc}") from exc
+        raise RuntimeError(
+            f"Could not set Administrators ownership on {path}: {exc}"
+        ) from exc
 
     if result.returncode != 0:
         details = (result.stderr or result.stdout).strip()[-800:]
