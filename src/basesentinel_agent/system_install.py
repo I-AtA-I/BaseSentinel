@@ -36,9 +36,21 @@ runpy.run_module("basesentinel_agent.cli", run_name="__main__")
 
 def product_root() -> Path:
     """Return the protected, machine-wide BaseSentinel application directory."""
-    root = os.environ.get("PROGRAMDATA")
-    if not root and os.name == "nt":
-        root = r"C:\ProgramData"
+    if os.name == "nt":
+        try:
+            import winreg
+
+            with winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders",
+            ) as key:
+                root, _ = winreg.QueryValueEx(key, "Common AppData")
+        except (ImportError, OSError) as exc:
+            raise RuntimeError(
+                "Could not resolve the protected Windows ProgramData folder."
+            ) from exc
+    else:
+        root = os.environ.get("PROGRAMDATA")
     if not root:
         raise RuntimeError("PROGRAMDATA is not available for the system-wide agent.")
     return Path(root) / "BaseSentinel"
@@ -58,8 +70,10 @@ def _run_icacls(
     users_read_only: bool,
     recursive: bool = True,
 ) -> None:
+    from basesentinel_windows.startup import windows_system_executable
+
     arguments = [
-        "icacls.exe",
+        windows_system_executable("icacls.exe"),
         str(path),
         "/inheritance:r",
         "/grant:r",
@@ -118,8 +132,10 @@ def _set_system_owner(path: Path, *, recursive: bool = True) -> None:
 
 def _current_user_sid() -> str:
     try:
+        from basesentinel_windows.startup import windows_system_executable
+
         result = subprocess.run(
-            ["whoami.exe", "/user", "/fo", "csv", "/nh"],
+            [windows_system_executable("whoami.exe"), "/user", "/fo", "csv", "/nh"],
             capture_output=True,
             text=True,
             encoding="utf-8",
