@@ -21,7 +21,7 @@ def _current_user() -> str:
     if not username:
         raise RuntimeError("Could not determine the current Windows username.")
     domain = os.environ.get("USERDOMAIN")
-    return f"{domain}\\\\{username}" if domain else username
+    return f"{domain}{chr(92)}{username}" if domain else username
 
 
 def build_startup_task_xml(
