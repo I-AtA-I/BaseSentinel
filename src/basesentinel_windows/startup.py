@@ -204,3 +204,148 @@ def run_task(task_name: str) -> None:
     """Start a registered task now, without waiting for the next user logon."""
     _require_windows()
     _run_schtasks(["/Run", "/TN", task_name])
+
+
+def build_system_boot_task_xml(
+    task_name: str,
+    command: Sequence[str],
+    *,
+    working_directory: str | Path | None = None,
+    description: str = "",
+) -> str:
+    """Build a visible SYSTEM task that starts the collector at Windows boot."""
+    if not task_name.strip():
+        raise ValueError("Task name must not be empty.")
+    if not command or not str(command[0]).strip():
+        raise ValueError("Task command must contain an executable.")
+
+    root = ET.Element(_tag("Task"), {"version": "1.4"})
+
+    registration = ET.SubElement(root, _tag("RegistrationInfo"))
+    ET.SubElement(registration, _tag("Author")).text = "BaseSentinel"
+    ET.SubElement(registration, _tag("Description")).text = (
+        description or task_name
+    )
+
+    triggers = ET.SubElement(root, _tag("Triggers"))
+    trigger = ET.SubElement(triggers, _tag("BootTrigger"))
+    ET.SubElement(trigger, _tag("Enabled")).text = "true"
+
+    principals = ET.SubElement(root, _tag("Principals"))
+    principal = ET.SubElement(principals, _tag("Principal"), {"id": "System"})
+    ET.SubElement(principal, _tag("UserId")).text = "S-1-5-18"
+    ET.SubElement(principal, _tag("LogonType")).text = "ServiceAccount"
+    ET.SubElement(principal, _tag("RunLevel")).text = "HighestAvailable"
+
+    settings = ET.SubElement(root, _tag("Settings"))
+    ET.SubElement(settings, _tag("MultipleInstancesPolicy")).text = "IgnoreNew"
+    ET.SubElement(settings, _tag("DisallowStartIfOnBatteries")).text = "false"
+    ET.SubElement(settings, _tag("StopIfGoingOnBatteries")).text = "false"
+    ET.SubElement(settings, _tag("AllowHardTerminate")).text = "true"
+    ET.SubElement(settings, _tag("StartWhenAvailable")).text = "true"
+    ET.SubElement(settings, _tag("RunOnlyIfNetworkAvailable")).text = "false"
+    ET.SubElement(settings, _tag("AllowStartOnDemand")).text = "true"
+    ET.SubElement(settings, _tag("Enabled")).text = "true"
+    ET.SubElement(settings, _tag("Hidden")).text = "false"
+    ET.SubElement(settings, _tag("ExecutionTimeLimit")).text = "PT0S"
+    ET.SubElement(settings, _tag("Priority")).text = "7"
+    restart = ET.SubElement(settings, _tag("RestartOnFailure"))
+    ET.SubElement(restart, _tag("Interval")).text = "PT1M"
+    ET.SubElement(restart, _tag("Count")).text = "3"
+
+    actions = ET.SubElement(root, _tag("Actions"), {"Context": "System"})
+    action = ET.SubElement(actions, _tag("Exec"))
+    ET.SubElement(action, _tag("Command")).text = str(command[0])
+    ET.SubElement(action, _tag("Arguments")).text = subprocess.list2cmdline(
+        [str(part) for part in command[1:]]
+    )
+    if working_directory is not None:
+        ET.SubElement(action, _tag("WorkingDirectory")).text = str(
+            Path(working_directory).resolve()
+        )
+
+    ET.indent(root, space="  ")
+    return ET.tostring(root, encoding="unicode", xml_declaration=True)
+
+
+def register_system_boot_task(
+    task_name: str,
+    command: Sequence[str],
+    *,
+    working_directory: str | Path | None = None,
+    description: str = "",
+) -> None:
+    """Register a visible, elevated SYSTEM task that runs before user sign-in."""
+    _require_windows()
+    xml_content = build_system_boot_task_xml(
+        task_name,
+        command,
+        working_directory=working_directory,
+        description=description,
+    )
+
+    temporary_path: Path | None = None
+    try:
+        xml_bytes = ET.tostring(
+            ET.fromstring(xml_content),
+            encoding="utf-16",
+            xml_declaration=True,
+        )
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            suffix=".xml",
+            prefix="basesentinel-system-task-",
+            delete=False,
+        ) as stream:
+            stream.write(xml_bytes)
+            temporary_path = Path(stream.name)
+
+        _run_schtasks(
+            ["/Create", "/TN", task_name, "/XML", str(temporary_path), "/F"]
+        )
+    finally:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink()
+            except OSError:
+                pass
+
+
+def is_admin() -> bool:
+    """Return whether the current Windows process has an elevated administrator token."""
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except (AttributeError, OSError):
+        return False
+
+
+def run_elevated(command: Sequence[str]) -> None:
+    """Launch a visible command after an explicit Windows UAC consent prompt."""
+    _require_windows()
+    if not command or not str(command[0]).strip():
+        raise ValueError("An executable is required for elevation.")
+
+    import ctypes
+
+    parameters = subprocess.list2cmdline([str(part) for part in command[1:]])
+    shell_execute = ctypes.windll.shell32.ShellExecuteW
+    shell_execute.restype = ctypes.c_void_p
+    result = shell_execute(
+        None,
+        "runas",
+        str(command[0]),
+        parameters,
+        str(Path.cwd()),
+        1,
+    )
+    result_code = result if isinstance(result, int) else getattr(result, "value", 0)
+    if not result_code or result_code <= 32:
+        if result_code == 1223:
+            raise RuntimeError("Administrator approval was cancelled.")
+        raise RuntimeError(
+            f"Windows could not start the elevated installer (ShellExecute result {result_code})."
+        )
