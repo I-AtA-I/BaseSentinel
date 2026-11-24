@@ -14,6 +14,12 @@ from basesentinel_agent.background import (
     request_background_stop,
     start_background_worker,
     try_acquire_worker_lock,
+    windowless_python_executable,
+)
+from basesentinel_windows.startup import (
+    logon_task_exists,
+    register_logon_task,
+    remove_logon_task,
 )
 from basesentinel_agent.client import AgentApiError, BaseSentinelClient
 from basesentinel_agent.queue import EventQueue
@@ -409,6 +415,84 @@ def background_status_command(args) -> int:
     return 0
 
 
+_STARTUP_TASK_NAME = "BaseSentinel Agent"
+
+
+def install_startup(args) -> int:
+    """Register the agent for automatic startup at the current user's logon."""
+    try:
+        AgentConfigStore().load()
+        executable = windowless_python_executable()
+        register_logon_task(
+            _STARTUP_TASK_NAME,
+            [
+                executable,
+                "-m",
+                "basesentinel_agent.cli",
+                "start",
+                "--interval",
+                str(args.interval),
+                "--batch-size",
+                str(args.batch_size),
+            ],
+            working_directory=default_data_dir(),
+            description="Start BaseSentinel endpoint event collection after Windows logon.",
+        )
+    except (RuntimeError, ValueError, OSError) as exc:
+        print(f"Could not install BaseSentinel automatic startup: {exc}")
+        return 1
+
+    try:
+        if background_status()["running"]:
+            print("The BaseSentinel background agent is already running.")
+        else:
+            pid = start_background_worker(
+                batch_size=args.batch_size,
+                interval=args.interval,
+            )
+            print(f"BaseSentinel background agent started (PID {pid}).")
+    except (RuntimeError, ValueError, OSError) as exc:
+        print(f"Automatic startup was registered, but the agent did not start now: {exc}")
+        print("The scheduled task will try again at the next Windows logon.")
+        return 1
+
+    print("Automatic startup is enabled for the current Windows user.")
+    print("The collector runs independently; the endpoint GUI is not required.")
+    return 0
+
+
+def remove_startup(args) -> int:
+    try:
+        removed = remove_logon_task(_STARTUP_TASK_NAME)
+    except RuntimeError as exc:
+        print(f"Could not remove BaseSentinel automatic startup: {exc}")
+        return 1
+
+    if removed:
+        print("BaseSentinel automatic startup has been removed.")
+        print("An already running background agent is not stopped.")
+    else:
+        print("BaseSentinel automatic startup was not installed.")
+    return 0
+
+
+def startup_status(args) -> int:
+    try:
+        installed = logon_task_exists(_STARTUP_TASK_NAME)
+        state = background_status()
+    except (RuntimeError, OSError, ValueError) as exc:
+        print(f"Could not read BaseSentinel startup status: {exc}")
+        return 1
+
+    print(f"Automatic startup: {'installed' if installed else 'not installed'}")
+    if state["running"]:
+        print(f"Background agent: running (PID {state['pid'] or 'unknown'})")
+    else:
+        print("Background agent: stopped")
+    print(f"Log file: {state['log_path']}")
+    return 0
+
+
 def identity(args) -> int:
     client = _client_from_config()
     result = client.identity()
@@ -487,6 +571,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show whether the background agent is running.",
     )
     background_status_parser.set_defaults(handler=background_status_command)
+
+    startup_install_parser = commands.add_parser(
+        "startup-install",
+        help="Start the agent automatically after the current Windows user signs in.",
+    )
+    startup_install_parser.add_argument("--interval", type=_positive_interval, default=60.0)
+    startup_install_parser.add_argument("--batch-size", type=_batch_size, default=500)
+    startup_install_parser.set_defaults(handler=install_startup)
+
+    startup_remove_parser = commands.add_parser(
+        "startup-remove",
+        help="Remove the agent's automatic Windows startup task.",
+    )
+    startup_remove_parser.set_defaults(handler=remove_startup)
+
+    startup_status_parser = commands.add_parser(
+        "startup-status",
+        help="Show the automatic startup task and background-agent state.",
+    )
+    startup_status_parser.set_defaults(handler=startup_status)
 
     worker_parser = commands.add_parser(
         "_background-worker",
