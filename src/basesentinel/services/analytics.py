@@ -89,24 +89,15 @@ class AnalyticsService:
             .order_by(SecurityEvent.severity)
         ).all()
 
-        # Alert totals based on their most recent occurrence.
+        # Alert inventory is independent of the selected event analytics period.
         alert_total = db.session.scalar(
-            select(func.count())
-            .select_from(Alert)
-            .where(
-                Alert.last_seen_at >= period_start,
-                Alert.last_seen_at <= now,
-            )
+            select(func.count()).select_from(Alert)
         )
 
         alerts_by_status = db.session.execute(
             select(
                 Alert.status,
                 func.count().label("count"),
-            )
-            .where(
-                Alert.last_seen_at >= period_start,
-                Alert.last_seen_at <= now,
             )
             .group_by(Alert.status)
             .order_by(Alert.status)
@@ -116,10 +107,6 @@ class AnalyticsService:
             select(
                 Alert.severity,
                 func.count().label("count"),
-            )
-            .where(
-                Alert.last_seen_at >= period_start,
-                Alert.last_seen_at <= now,
             )
             .group_by(Alert.severity)
             .order_by(Alert.severity)
