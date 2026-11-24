@@ -125,3 +125,24 @@ def test_current_user_uses_single_windows_domain_separator(monkeypatch):
     monkeypatch.setenv("USERDOMAIN", "WORKSTATION")
 
     assert startup._current_user() == r"WORKSTATION\operator"
+
+
+
+def test_task_can_be_ended_without_removing_it(monkeypatch):
+    calls = []
+    monkeypatch.setattr(startup, "_require_windows", lambda: None)
+    monkeypatch.setattr(startup, "task_exists", lambda _name: True)
+    monkeypatch.setattr(startup, "_run_schtasks", lambda args: calls.append(args))
+
+    assert startup.end_task("BaseSentinel Server") is True
+    assert calls == [["/End", "/TN", "BaseSentinel Server"]]
+
+
+def test_task_can_be_disabled_without_removing_it(monkeypatch):
+    calls = []
+    monkeypatch.setattr(startup, "_require_windows", lambda: None)
+    monkeypatch.setattr(startup, "task_exists", lambda _name: True)
+    monkeypatch.setattr(startup, "_run_schtasks", lambda args: calls.append(args))
+
+    assert startup.disable_task("BaseSentinel Server") is True
+    assert calls == [["/Change", "/TN", "BaseSentinel Server", "/Disable"]]
