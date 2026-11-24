@@ -24,7 +24,8 @@ def test_agent_startup_commands_are_available_with_safe_defaults():
     assert parser.parse_args(["startup-stop-admin"]).handler is not None
 
 
-def test_install_startup_requests_system_wide_install(monkeypatch):
+def test_install_startup_requests_system_wide_install(monkeypatch, tmp_path):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     captured = {}
 
     monkeypatch.setattr(
@@ -66,7 +67,8 @@ def test_remove_agent_startup_removes_system_task_and_retains_data(monkeypatch, 
     assert "data were retained" in output
 
 
-def test_scheduled_agent_start_is_silent_and_skips_an_existing_worker(monkeypatch):
+def test_scheduled_agent_start_is_silent_and_skips_an_existing_worker(monkeypatch, tmp_path):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     started = []
     monkeypatch.setattr(cli.AgentConfigStore, "load", lambda self: {"agent_id": "agent-1"})
     monkeypatch.setattr(cli, "background_status", lambda: {"running": True, "pid": 42})
@@ -86,6 +88,7 @@ def test_scheduled_agent_start_logs_launch_errors_without_console_output(
     monkeypatch,
     tmp_path,
 ):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     monkeypatch.setattr(cli.AgentConfigStore, "load", lambda self: {"agent_id": "agent-1"})
     monkeypatch.setattr(cli, "default_data_dir", lambda: tmp_path)
     monkeypatch.setattr(cli, "background_status", lambda: {"running": False})
@@ -107,6 +110,7 @@ def test_unprivileged_startup_install_requests_visible_uac_approval(
 ):
     from basesentinel_agent import system_install
 
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     bootstrap = tmp_path / "bootstrap.json"
     bootstrap.write_text("temporary", encoding="utf-8")
     captured = {}
