@@ -196,7 +196,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     install_parser = commands.add_parser(
         "startup-install",
-        help="Start the BaseSentinel server automatically when Windows boots.",
+        help="Start the BaseSentinel server after the current user signs in.",
     )
     install_parser.add_argument(
         "--host",
