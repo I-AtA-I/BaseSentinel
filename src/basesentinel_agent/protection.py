@@ -67,9 +67,11 @@ def unprotect_secret(encrypted: bytes, *, machine_scope: bool = False) -> str:
     crypt32, kernel32 = _api()
     source, source_buffer = _blob(encrypted)
     destination = _DataBlob()
+    # The scope is selected when the blob is encrypted. CryptUnprotectData
+    # must be called with dwFlags=0, including for machine-scope blobs.
     if not crypt32.CryptUnprotectData(
-        ctypes.byref(source), None, None, None, None,
-        0x4 if machine_scope else 0, ctypes.byref(destination),
+        ctypes.byref(source), None, None, None, None, 0,
+        ctypes.byref(destination),
     ):
         raise ctypes.WinError(ctypes.get_last_error())
     try:
