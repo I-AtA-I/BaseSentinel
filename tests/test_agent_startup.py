@@ -59,7 +59,7 @@ def test_install_startup_registers_logon_task_and_starts_collector(monkeypatch, 
 
 def test_remove_agent_startup_does_not_stop_running_worker(monkeypatch, capsys):
     captured = {}
-    monkeypatch.setattr(cli, "remove_logon_task", lambda name: captured.setdefault("name", name) or True)
+    monkeypatch.setattr(cli, "remove_logon_task", lambda name: captured.update(name=name) or True)
 
     result = cli.remove_startup(Namespace())
 
