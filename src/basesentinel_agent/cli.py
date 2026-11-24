@@ -500,6 +500,7 @@ def install_startup(args) -> int:
         print("Enroll this Windows endpoint before installing automatic startup.")
         return 1
 
+    stopped = False
     try:
         state = background_status()
         if state["running"]:
@@ -512,7 +513,17 @@ def install_startup(args) -> int:
         return 1
 
     if is_admin():
-        return _finish_system_install(config, args)
+        result = _finish_system_install(config, args)
+        if result != 0 and stopped:
+            try:
+                start_background_worker(
+                    batch_size=args.batch_size,
+                    interval=args.interval,
+                )
+                print("The previous per-user collector was restarted.")
+            except (RuntimeError, ValueError, OSError) as exc:
+                print(f"Could not restart the previous collector: {exc}")
+        return result
 
     bootstrap_path = None
     try:
@@ -548,7 +559,7 @@ def install_startup(args) -> int:
                 pass
         print(f"Could not start the elevated BaseSentinel installer: {exc}")
         try:
-            if 'stopped' in locals() and stopped:
+            if stopped:
                 start_background_worker(
                     batch_size=args.batch_size,
                     interval=args.interval,
