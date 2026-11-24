@@ -88,7 +88,7 @@ def test_register_logon_task_writes_xml_then_calls_schtasks(monkeypatch, tmp_pat
         working_directory=tmp_path,
     )
 
-    assert captured["xml_bytes"].startswith(b"\\xff\\xfe")
+    assert captured["xml_bytes"].startswith(b"\xff\xfe")
     assert "encoding='utf-16'" in captured["xml_bytes"].decode("utf-16").lower()
     assert captured["arguments"][:3] == ["/Create", "/TN", "BaseSentinel Agent"]
     assert captured["xml"].findtext("task:Actions/task:Exec/task:Command", namespaces=_NAMESPACE) == r"C:\Python\pythonw.exe"
@@ -99,6 +99,7 @@ def test_register_logon_task_writes_xml_then_calls_schtasks(monkeypatch, tmp_pat
 def test_logon_task_query_and_remove(monkeypatch):
     calls = []
     responses = [
+        subprocess.CompletedProcess([], 0, stdout="TaskName", stderr=""),
         subprocess.CompletedProcess([], 0, stdout="TaskName", stderr=""),
         subprocess.CompletedProcess([], 0, stdout="", stderr=""),
     ]
@@ -114,7 +115,8 @@ def test_logon_task_query_and_remove(monkeypatch):
     assert startup.task_exists("BaseSentinel Agent") is True
     assert startup.remove_task("BaseSentinel Agent") is True
     assert calls[0][:4] == ["schtasks.exe", "/Query", "/TN", "BaseSentinel Agent"]
-    assert calls[1][:4] == ["schtasks.exe", "/Delete", "/TN", "BaseSentinel Agent"]
+    assert calls[1][:4] == ["schtasks.exe", "/Query", "/TN", "BaseSentinel Agent"]
+    assert calls[2][:4] == ["schtasks.exe", "/Delete", "/TN", "BaseSentinel Agent"]
 
 
 
