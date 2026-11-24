@@ -105,8 +105,15 @@ def _collect_and_send(
     stop_event: threading.Event | None = None,
 ) -> tuple[int, int, int, int]:
     checkpoint = queue.security_checkpoint()
-    discovered, next_checkpoint = collect_security_events(checkpoint)
-    queue.add_batch_and_checkpoint(discovered, next_checkpoint, channel="security")
+    discovered: list[dict] = []
+    next_checkpoint = checkpoint
+    try:
+        discovered, next_checkpoint = collect_security_events(checkpoint)
+        queue.add_batch_and_checkpoint(discovered, next_checkpoint, channel="security")
+    except RuntimeError as exc:
+        # Security log access is optional for a standard user account. Keep the
+        # checkpoint unchanged so the agent retries if permissions are granted later.
+        print(f"Windows Security telemetry unavailable: {exc}")
 
     defender_discovered = 0
     try:
@@ -135,6 +142,11 @@ def collect(args) -> int:
         audit_state = ensure_pnp_audit_activity()
         if audit_state == "enabled":
             print("Windows Plug and Play success auditing enabled.")
+        elif audit_state == "requires-admin":
+            print(
+                "USB detection setup skipped: successful Plug and Play auditing "
+                "is disabled and requires an administrator to enable."
+            )
     except RuntimeError as exc:
         print(f"USB detection setup warning: {exc}")
 
@@ -262,6 +274,11 @@ def _run_loop(args, stop_event: threading.Event, mode: str) -> int:
         audit_state = ensure_pnp_audit_activity()
         if audit_state == "enabled":
             print("Windows Plug and Play success auditing enabled.")
+        elif audit_state == "requires-admin":
+            print(
+                "USB detection setup skipped: successful Plug and Play auditing "
+                "is disabled and requires an administrator to enable."
+            )
     except RuntimeError as exc:
         print(f"USB detection setup warning: {exc}")
 
