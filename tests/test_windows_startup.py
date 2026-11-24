@@ -71,6 +71,7 @@ def test_register_logon_task_writes_xml_then_calls_schtasks(monkeypatch, tmp_pat
     captured = {}
 
     monkeypatch.setattr(startup, "_require_windows", lambda: None)
+    monkeypatch.setattr(startup, "_current_user", lambda: "operator")
 
     def fake_run(arguments):
         captured["arguments"] = arguments
@@ -83,7 +84,6 @@ def test_register_logon_task_writes_xml_then_calls_schtasks(monkeypatch, tmp_pat
         "BaseSentinel Agent",
         [r"C:\Python\pythonw.exe", "-m", "basesentinel_agent.cli", "start"],
         working_directory=tmp_path,
-        username="operator",
     )
 
     assert captured["arguments"][:3] == ["/Create", "/TN", "BaseSentinel Agent"]
