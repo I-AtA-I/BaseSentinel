@@ -113,3 +113,11 @@ def test_logon_task_query_and_remove(monkeypatch):
     assert calls[1][:4] == ["schtasks.exe", "/Delete", "/TN", "BaseSentinel Agent"]
 
 
+
+
+
+def test_current_user_uses_single_windows_domain_separator(monkeypatch):
+    monkeypatch.setenv("USERNAME", "operator")
+    monkeypatch.setenv("USERDOMAIN", "WORKSTATION")
+
+    assert startup._current_user() == r"WORKSTATION\operator"
