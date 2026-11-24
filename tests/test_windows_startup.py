@@ -76,6 +76,8 @@ def test_register_logon_task_writes_xml_then_calls_schtasks(monkeypatch, tmp_pat
     def fake_run(arguments):
         captured["arguments"] = arguments
         xml_path = arguments[arguments.index("/XML") + 1]
+        xml_bytes = __import__("pathlib").Path(xml_path).read_bytes()
+        captured["xml_bytes"] = xml_bytes
         captured["xml"] = ET.parse(xml_path).getroot()
         return subprocess.CompletedProcess(arguments, 0, stdout="", stderr="")
 
@@ -86,6 +88,8 @@ def test_register_logon_task_writes_xml_then_calls_schtasks(monkeypatch, tmp_pat
         working_directory=tmp_path,
     )
 
+    assert captured["xml_bytes"].startswith(b"\\xff\\xfe")
+    assert "encoding='utf-16'" in captured["xml_bytes"].decode("utf-16").lower()
     assert captured["arguments"][:3] == ["/Create", "/TN", "BaseSentinel Agent"]
     assert captured["xml"].findtext("task:Actions/task:Exec/task:Command", namespaces=_NAMESPACE) == r"C:\Python\pythonw.exe"
     xml_path = captured["arguments"][captured["arguments"].index("/XML") + 1]

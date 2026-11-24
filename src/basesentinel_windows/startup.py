@@ -133,14 +133,21 @@ def register_logon_task(
 
     temporary_path: Path | None = None
     try:
+        # Task Scheduler's XML importer expects a matching Unicode encoding.
+        # Serialize the document as UTF-16 (including its BOM and declaration)
+        # instead of writing UTF-8 text with a potentially mismatched declaration.
+        xml_bytes = ET.tostring(
+            ET.fromstring(xml_content),
+            encoding="utf-16",
+            xml_declaration=True,
+        )
         with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
+            mode="wb",
             suffix=".xml",
             prefix="basesentinel-task-",
             delete=False,
         ) as stream:
-            stream.write(xml_content)
+            stream.write(xml_bytes)
             temporary_path = Path(stream.name)
 
         _run_schtasks(["/Create", "/TN", task_name, "/XML", str(temporary_path), "/F"])
