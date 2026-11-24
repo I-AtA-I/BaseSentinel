@@ -8,7 +8,18 @@ from pathlib import Path
 from basesentinel_agent.protection import protect_secret, unprotect_secret
 
 
-def default_data_dir() -> Path:
+def default_data_dir(*, machine_scope: bool | None = None) -> Path:
+    if machine_scope is None:
+        machine_scope = os.environ.get("BASESENTINEL_AGENT_SCOPE", "").casefold() == "machine"
+
+    if machine_scope:
+        root = os.environ.get("PROGRAMDATA")
+        if not root and os.name == "nt":
+            root = r"C:\ProgramData"
+        if not root:
+            raise RuntimeError("PROGRAMDATA is not available for the system-wide agent.")
+        return Path(root) / "BaseSentinel" / "Data"
+
     root = os.environ.get("LOCALAPPDATA")
     if not root:
         raise RuntimeError("LOCALAPPDATA is not available; run the agent in a Windows user session.")
@@ -16,11 +27,19 @@ def default_data_dir() -> Path:
 
 
 class AgentConfigStore:
-    def __init__(self, path: Path | None = None):
-        self.path = path or default_data_dir() / "agent.json"
+    def __init__(
+        self,
+        path: Path | None = None,
+        *,
+        machine_scope: bool | None = None,
+    ):
+        if machine_scope is None:
+            machine_scope = os.environ.get("BASESENTINEL_AGENT_SCOPE", "").casefold() == "machine"
+        self.machine_scope = machine_scope
+        self.path = path or default_data_dir(machine_scope=machine_scope) / "agent.json"
 
     def save(self, server_url: str, token: str, agent_id: str) -> None:
-        encrypted = protect_secret(token)
+        encrypted = protect_secret(token, machine_scope=self.machine_scope)
         payload = {
             "config_version": 1,
             "server_url": server_url.rstrip("/"),
@@ -37,7 +56,10 @@ class AgentConfigStore:
             payload = json.loads(self.path.read_text(encoding="utf-8"))
             if payload.get("config_version") != 1:
                 raise ValueError("Unsupported agent configuration version.")
-            token = unprotect_secret(base64.b64decode(payload["protected_token"], validate=True))
+            token = unprotect_secret(
+                base64.b64decode(payload["protected_token"], validate=True),
+                machine_scope=self.machine_scope,
+            )
             if not payload.get("server_url") or not payload.get("agent_id") or not token:
                 raise ValueError("Agent configuration is incomplete.")
             return {"server_url": payload["server_url"], "agent_id": payload["agent_id"], "token": token}
