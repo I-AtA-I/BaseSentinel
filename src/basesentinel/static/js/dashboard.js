@@ -12,6 +12,7 @@ const state = {
     overview: null,
     timeline: null,
     alerts: [],
+    events: [],
     busy: false,
 };
 
@@ -272,20 +273,23 @@ async function loadDashboard() {
     refreshButton.textContent = "Loading...";
 
     try {
-        const [overview, timeline, alerts] = await Promise.all([
+        const [overview, timeline, alerts, events] = await Promise.all([
             apiRequest(`/dashboard/overview?period_hours=${state.period}`),
             apiRequest(`/dashboard/timeline?period_hours=${state.period}`),
             apiRequest("/alerts?limit=8&offset=0"),
+            apiRequest("/events?limit=8&offset=0"),
         ]);
 
         state.overview = overview;
         state.timeline = timeline;
         state.alerts = alerts.items || [];
+        state.events = events.items || [];
 
         renderOverview();
         renderTimeline();
         renderSeverity();
         renderCategories();
+        renderRecentEvents();
         renderAlerts();
         renderAgents();
 
@@ -420,6 +424,40 @@ function renderCategories() {
                 <div class="category-track"><div class="category-fill" style="width:${width}%"></div></div>
                 <strong>${formatNumber(item.count)}</strong>
             </a>`;
+    }).join("");
+}
+
+function renderRecentEvents() {
+    const container = document.getElementById("recent-events-table");
+
+    if (!state.events.length) {
+        container.innerHTML = '<tr><td colspan="5" class="table-empty">No events received yet.</td></tr>';
+        return;
+    }
+
+    container.innerHTML = state.events.map((event) => {
+        const severity = Number(event.severity);
+        const title = String(event.event_type || "Security event")
+            .replace(/[._-]+/g, " ")
+            .replace(/\\b\\w/g, (letter) => letter.toUpperCase());
+        const message = String(event.message || "").replace(/\\s+/g, " ").trim();
+        const preview = message.length > 120 ? `${message.slice(0, 117)}…` : message;
+        const category = String(event.category || "unknown")
+            .replace(/[_-]+/g, " ")
+            .replace(/\\b\\w/g, (letter) => letter.toUpperCase());
+        const device = event.device_name || `Device ${String(event.agent_id || "").slice(0, 8)}`;
+
+        return `
+            <tr>
+                <td>
+                    <a class="alert-title alert-detail-link" href="/events/${encodeURIComponent(event.id)}">${escapeHtml(title)}</a>
+                    <div class="muted">${escapeHtml(preview || "No message provided")}</div>
+                </td>
+                <td><span class="severity-label ${severityClass(severity)}">${severity} · ${severityName(severity)}</span></td>
+                <td>${escapeHtml(category)}</td>
+                <td><a class="event-device-name" href="/agents/${encodeURIComponent(event.agent_id)}">${escapeHtml(device)}</a></td>
+                <td>${formatDate(event.received_at)}</td>
+            </tr>`;
     }).join("");
 }
 
