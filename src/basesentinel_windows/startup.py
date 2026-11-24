@@ -330,9 +330,19 @@ def run_elevated(command: Sequence[str]) -> None:
         raise ValueError("An executable is required for elevation.")
 
     import ctypes
+    from ctypes import wintypes
 
     parameters = subprocess.list2cmdline([str(part) for part in command[1:]])
-    shell_execute = ctypes.windll.shell32.ShellExecuteW
+    shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+    shell_execute = shell32.ShellExecuteW
+    shell_execute.argtypes = [
+        wintypes.HWND,
+        wintypes.LPCWSTR,
+        wintypes.LPCWSTR,
+        wintypes.LPCWSTR,
+        wintypes.LPCWSTR,
+        ctypes.c_int,
+    ]
     shell_execute.restype = ctypes.c_void_p
     result = shell_execute(
         None,
@@ -344,7 +354,8 @@ def run_elevated(command: Sequence[str]) -> None:
     )
     result_code = result if isinstance(result, int) else getattr(result, "value", 0)
     if not result_code or result_code <= 32:
-        if result_code == 1223:
+        error = ctypes.get_last_error()
+        if error == 1223:
             raise RuntimeError("Administrator approval was cancelled.")
         raise RuntimeError(
             f"Windows could not start the elevated installer (ShellExecute result {result_code})."
@@ -356,7 +367,10 @@ def is_system_boot_task(task_name: str) -> bool:
     _require_windows()
     try:
         result = _run_schtasks(["/Query", "/TN", task_name, "/XML"])
-        root = ET.fromstring(result.stdout)
+        xml_text = result.stdout.lstrip("\ufeff")
+        if xml_text.startswith("<?xml") and "?>" in xml_text:
+            xml_text = xml_text.split("?>", 1)[1]
+        root = ET.fromstring(xml_text)
     except (RuntimeError, ET.ParseError):
         return False
 
