@@ -347,7 +347,7 @@ def test_windows_lock_modes_use_shared_status_and_exclusive_worker_locks(
     assert background._try_acquire_status_lock(tmp_path) is None
     fake_release(worker)
 
-    assert requested_modes == [True, True, True, False, False, True, False]
+    assert requested_modes == [True, True, True, False, False, True]
 
 def test_event_workspace_sidebar_items_are_interactive():
     from pathlib import Path
