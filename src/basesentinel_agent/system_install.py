@@ -240,12 +240,27 @@ def _copy_runtime(destination: Path) -> None:
         )
 
     source_root = Path(__file__).resolve().parents[1]
-    if not (source_root / "basesentinel_agent" / "cli.py").is_file():
-        raise RuntimeError("Could not locate the installed BaseSentinel agent source files.")
+    package_names = ("basesentinel_agent", "basesentinel_windows")
+    if any(not (source_root / package / "__init__.py").is_file() for package in package_names):
+        raise RuntimeError("Could not locate the installed BaseSentinel agent packages.")
 
     ignore = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo")
-    shutil.copytree(python_home, destination / "python", ignore=ignore)
-    shutil.copytree(source_root, destination / "src", ignore=ignore)
+    python_runtime = destination / "python"
+    shutil.copytree(python_home, python_runtime, ignore=ignore)
+
+    # The collector only uses the standard library. Exclude user-installed
+    # Python packages and .pth startup hooks from the copied runtime.
+    shutil.rmtree(python_runtime / "Lib" / "site-packages", ignore_errors=True)
+
+    source_destination = destination / "src"
+    source_destination.mkdir()
+    for package in package_names:
+        shutil.copytree(
+            source_root / package,
+            source_destination / package,
+            ignore=ignore,
+        )
+
     (destination / "start_agent.py").write_text(
         _SYSTEM_ENTRY_POINT,
         encoding="utf-8",
