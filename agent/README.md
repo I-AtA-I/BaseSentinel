@@ -71,7 +71,7 @@ basesentinel-agent startup-install --interval 60 --batch-size 500
 basesentinel-agent startup-status
 ```
 
-This creates a hidden Windows Task Scheduler task triggered when the enrolled user signs in and starts the collector immediately. The task uses the same user account as enrollment because the agent credential is protected with that user's Windows DPAPI key. This is a per-user logon task, not a Windows service; it does not run before sign-in.
+This creates a visible Windows Task Scheduler task triggered when the enrolled user signs in and starts the collector immediately. The task uses the same user account as enrollment because the agent credential is protected with that user's Windows DPAPI key. This is a per-user logon task, not a Windows service; it does not run before sign-in.
 
 Remove automatic startup with:
 
