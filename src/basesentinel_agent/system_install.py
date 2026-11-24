@@ -85,6 +85,28 @@ def _run_icacls(path: Path, *, users_read_only: bool) -> None:
         )
 
 
+
+def _set_system_owner(path: Path) -> None:
+    """Make SYSTEM the owner so an unelevated user cannot rewrite protected files."""
+    try:
+        result = subprocess.run(
+            ["icacls.exe", str(path), "/setowner", "*S-1-5-18", "/T"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except OSError as exc:
+        raise RuntimeError(f"Could not set SYSTEM ownership on {path}: {exc}") from exc
+
+    if result.returncode != 0:
+        details = (result.stderr or result.stdout).strip()[-800:]
+        raise RuntimeError(
+            f"Could not set SYSTEM ownership on {path}."
+            + (f" Details: {details}" if details else "")
+        )
+
 def _current_user_sid() -> str:
     try:
         result = subprocess.run(
@@ -115,9 +137,12 @@ def create_admin_bootstrap(config: dict) -> Path:
     if any(not isinstance(config.get(key), str) or not config[key] for key in required):
         raise ValueError("The enrolled agent configuration is incomplete.")
 
-    temporary_root = Path(
-        os.environ.get("LOCALAPPDATA") or tempfile.gettempdir()
-    ) / "Temp"
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    temporary_root = (
+        Path(local_app_data) / "Temp"
+        if local_app_data
+        else Path(tempfile.gettempdir())
+    )
     temporary_root.mkdir(parents=True, exist_ok=True)
 
     protected = protect_secret(config["token"], machine_scope=True)
@@ -246,7 +271,9 @@ def install_system_agent(
     root.mkdir(parents=True, exist_ok=True)
     data_dir.mkdir(parents=True, exist_ok=True)
     _run_icacls(root, users_read_only=True)
+    _set_system_owner(root)
     _run_icacls(data_dir, users_read_only=False)
+    _set_system_owner(data_dir)
 
     staging = Path(tempfile.mkdtemp(prefix=".Runtime-staging-", dir=root))
     backup: Path | None = None
@@ -254,6 +281,7 @@ def install_system_agent(
     try:
         _copy_runtime(staging)
         _run_icacls(staging, users_read_only=True)
+        _set_system_owner(staging)
 
         if task_exists(_TASK_NAME):
             # The old per-user task may exist from an earlier agent version.
