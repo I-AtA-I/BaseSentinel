@@ -7,6 +7,7 @@ import platform
 import socket
 import sys
 import threading
+from contextlib import redirect_stderr, redirect_stdout
 
 from basesentinel_agent.background import (
     background_status,
@@ -17,9 +18,13 @@ from basesentinel_agent.background import (
     windowless_python_executable,
 )
 from basesentinel_windows.startup import (
-    task_exists,
+    end_task,
+    is_admin,
+    is_system_boot_task,
     register_logon_task,
     remove_task,
+    run_elevated,
+    task_exists,
 )
 from basesentinel_agent.client import AgentApiError, BaseSentinelClient
 from basesentinel_agent.queue import EventQueue
@@ -409,6 +414,21 @@ def start_background(args) -> int:
 
 def stop_background(args) -> int:
     try:
+        if is_system_boot_task(_STARTUP_TASK_NAME):
+            if not is_admin():
+                run_elevated([
+                    sys.executable,
+                    "-m",
+                    "basesentinel_agent.cli",
+                    "startup-stop-admin",
+                ])
+                print("The elevated stop tool was launched. Approve the Windows UAC prompt to stop the collector.")
+                return 0
+            end_task(_STARTUP_TASK_NAME)
+            print("BaseSentinel system-wide collector stopped.")
+            print("Automatic startup at the next Windows boot remains enabled.")
+            return 0
+
         stopped = request_background_stop(timeout=args.timeout)
     except (RuntimeError, TimeoutError, OSError, ValueError) as exc:
         print(f"Could not confirm background agent shutdown: {exc}")
@@ -435,48 +455,106 @@ def background_status_command(args) -> int:
 _STARTUP_TASK_NAME = "BaseSentinel Agent"
 
 
-def install_startup(args) -> int:
-    """Register the agent for automatic startup at the current user's logon."""
+def _finish_system_install(config: dict, args) -> int:
+    from basesentinel_agent.system_install import install_system_agent
+
     try:
-        AgentConfigStore().load()
-        executable = windowless_python_executable()
-        register_logon_task(
-            _STARTUP_TASK_NAME,
-            [
-                executable,
-                "-m",
-                "basesentinel_agent.cli",
-                "startup-run",
-                "--interval",
-                str(args.interval),
-                "--batch-size",
-                str(args.batch_size),
-            ],
-            working_directory=default_data_dir(),
-            description="Start BaseSentinel endpoint event collection after Windows logon.",
+        result = install_system_agent(
+            config,
+            interval=args.interval,
+            batch_size=args.batch_size,
         )
     except (RuntimeError, ValueError, OSError) as exc:
-        print(f"Could not install BaseSentinel automatic startup: {exc}")
+        print(f"Could not install BaseSentinel for all Windows users: {exc}")
+        return 1
+
+    print("BaseSentinel system-wide automatic startup is installed.")
+    print("Run account: Windows LocalSystem (SYSTEM)")
+    print("Coverage: all Windows users, including before anyone signs in.")
+    print(f"Protected runtime: {result['runtime_dir']}")
+    print(f"Machine data: {result['data_dir']}")
+    if result["started"]:
+        print("The system-wide collector was started.")
+    else:
+        print("The startup task is installed, but it could not be started immediately.")
+        print(f"Details: {result['start_error']}")
+        print("Windows will try again at the next boot.")
+    return 0 if result["started"] else 1
+
+
+def install_startup(args) -> int:
+    """Install one protected SYSTEM collector for all Windows user accounts."""
+    try:
+        config = AgentConfigStore(machine_scope=False).load()
+    except (RuntimeError, ValueError, OSError) as exc:
+        print(f"Could not load the enrolled BaseSentinel account: {exc}")
+        print("Enroll this Windows endpoint before installing automatic startup.")
         return 1
 
     try:
-        if background_status()["running"]:
-            print("The BaseSentinel background agent is already running.")
-        else:
-            pid = start_background_worker(
-                batch_size=args.batch_size,
-                interval=args.interval,
-            )
-            print(f"BaseSentinel background agent started (PID {pid}).")
-    except (RuntimeError, ValueError, OSError) as exc:
-        print(f"Automatic startup was registered, but the agent did not start now: {exc}")
-        print("The scheduled task will try again at the next Windows logon.")
+        state = background_status()
+        if state["running"]:
+            request_background_stop(timeout=60.0)
+    except (RuntimeError, TimeoutError, OSError, ValueError) as exc:
+        print(f"Could not stop the existing per-user collector: {exc}")
+        print("No system-wide collector was installed.")
         return 1
 
-    print("Automatic startup is enabled for the current Windows user.")
-    print("The collector runs independently; the endpoint GUI is not required.")
+    if is_admin():
+        return _finish_system_install(config, args)
+
+    bootstrap_path = None
+    try:
+        from basesentinel_agent.system_install import create_admin_bootstrap
+
+        bootstrap_path = create_admin_bootstrap(config)
+        command = [
+            sys.executable,
+            "-m",
+            "basesentinel_agent.cli",
+            "startup-install-admin",
+            "--bootstrap-file",
+            str(bootstrap_path),
+            "--interval",
+            str(args.interval),
+            "--batch-size",
+            str(args.batch_size),
+        ]
+        print("Administrator approval is required to install the all-users collector.")
+        print("Windows will display a UAC prompt. Review it and approve BaseSentinel to continue.")
+        run_elevated(command)
+    except (RuntimeError, ValueError, OSError) as exc:
+        if bootstrap_path is not None:
+            try:
+                bootstrap_path.unlink()
+            except OSError:
+                pass
+        print(f"Could not start the elevated BaseSentinel installer: {exc}")
+        return 1
+
+    print("The elevated installer was launched. Complete the Windows UAC prompt to finish setup.")
     return 0
 
+
+def install_startup_admin(args) -> int:
+    """Elevated continuation of the visible all-users installation."""
+    from basesentinel_agent.system_install import read_admin_bootstrap
+
+    bootstrap_path = Path(args.bootstrap_file)
+    try:
+        config = read_admin_bootstrap(bootstrap_path)
+        if not is_admin():
+            print("The elevated installer did not receive an Administrator token.")
+            return 1
+        return _finish_system_install(config, args)
+    except (RuntimeError, ValueError, OSError) as exc:
+        print(f"System-wide BaseSentinel installation failed: {exc}")
+        return 1
+    finally:
+        try:
+            bootstrap_path.unlink()
+        except OSError:
+            pass
 
 def startup_launch(args) -> int:
     """Launch the detached worker silently from the Windows logon task."""
@@ -500,36 +578,77 @@ def startup_launch(args) -> int:
 
 
 def remove_startup(args) -> int:
+    """Remove the system-wide startup task after explicit Administrator approval."""
+    if not is_admin():
+        try:
+            run_elevated([
+                sys.executable,
+                "-m",
+                "basesentinel_agent.cli",
+                "startup-remove-admin",
+            ])
+        except (RuntimeError, ValueError, OSError) as exc:
+            print(f"Could not request Administrator approval: {exc}")
+            return 1
+        print("The elevated removal tool was launched. Approve the Windows UAC prompt to continue.")
+        return 0
+
+    return remove_startup_admin(args)
+
+
+def remove_startup_admin(args) -> int:
+    from basesentinel_agent.system_install import remove_system_agent_startup
+
+    if not is_admin():
+        print("Removing the system-wide startup task requires Administrator privileges.")
+        return 1
     try:
-        removed = remove_task(_STARTUP_TASK_NAME)
-    except RuntimeError as exc:
+        removed = remove_system_agent_startup()
+    except (RuntimeError, OSError, ValueError) as exc:
         print(f"Could not remove BaseSentinel automatic startup: {exc}")
         return 1
 
     if removed:
-        print("BaseSentinel automatic startup has been removed.")
-        print("An already running background agent is not stopped.")
+        print("BaseSentinel system-wide automatic startup has been removed.")
+        print("The protected runtime and agent data were retained.")
     else:
         print("BaseSentinel automatic startup was not installed.")
     return 0
 
-
 def startup_status(args) -> int:
     try:
         installed = task_exists(_STARTUP_TASK_NAME)
-        state = background_status()
+        system_wide = installed and is_system_boot_task(_STARTUP_TASK_NAME)
     except (RuntimeError, OSError, ValueError) as exc:
         print(f"Could not read BaseSentinel startup status: {exc}")
         return 1
 
-    print(f"Automatic startup: {'installed' if installed else 'not installed'}")
-    if state["running"]:
-        print(f"Background agent: running (PID {state['pid'] or 'unknown'})")
+    if system_wide:
+        from basesentinel_agent.system_install import machine_data_dir
+
+        print("Automatic startup: installed for all Windows users")
+        print("Run account: Windows LocalSystem (SYSTEM)")
+        print("Start trigger: Windows boot (before user sign-in)")
+        print(f"Agent log: {machine_data_dir() / 'agent.log'}")
+    elif installed:
+        print("Automatic startup: legacy per-user task detected")
+        print("Run startup-install again to replace it with the all-users system task.")
     else:
-        print("Background agent: stopped")
-    print(f"Log file: {state['log_path']}")
+        print("Automatic startup: not installed")
     return 0
 
+
+def startup_service_run(args) -> int:
+    """Run the system-wide collector in the foreground under Task Scheduler."""
+    os.environ["BASESENTINEL_AGENT_SCOPE"] = "machine"
+    data_dir = default_data_dir(machine_scope=True)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    log_path = data_dir / "agent.log"
+
+    with log_path.open("a", encoding="utf-8", buffering=1) as log_stream:
+        with redirect_stdout(log_stream), redirect_stderr(log_stream):
+            print("BaseSentinel system-wide collector started under LocalSystem.")
+            return background_worker(args)
 
 def identity(args) -> int:
     client = _client_from_config()
@@ -541,6 +660,24 @@ def identity(args) -> int:
     else:
         print("Background worker: stopped")
     print(f"Log file: {state['log_path']}")
+    return 0
+
+
+
+def _stop_system_agent_admin() -> int:
+    if not is_admin():
+        print("Stopping the system-wide agent requires Administrator privileges.")
+        return 1
+    try:
+        if not task_exists(_STARTUP_TASK_NAME):
+            print("BaseSentinel automatic startup is not installed.")
+            return 0
+        end_task(_STARTUP_TASK_NAME)
+    except RuntimeError as exc:
+        print(f"Could not stop the system-wide BaseSentinel collector: {exc}")
+        return 1
+    print("BaseSentinel system-wide collector stopped.")
+    print("Automatic startup at the next Windows boot remains enabled.")
     return 0
 
 
@@ -612,11 +749,42 @@ def build_parser() -> argparse.ArgumentParser:
 
     startup_install_parser = commands.add_parser(
         "startup-install",
-        help="Start the agent automatically after the current Windows user signs in.",
+        help="Install the protected system-wide agent startup (Administrator approval required).",
     )
     startup_install_parser.add_argument("--interval", type=_positive_interval, default=60.0)
     startup_install_parser.add_argument("--batch-size", type=_batch_size, default=500)
     startup_install_parser.set_defaults(handler=install_startup)
+
+    startup_install_admin_parser = commands.add_parser(
+        "startup-install-admin",
+        help=argparse.SUPPRESS,
+    )
+    startup_install_admin_parser.add_argument("--bootstrap-file", required=True)
+    startup_install_admin_parser.add_argument("--interval", type=_positive_interval, default=60.0)
+    startup_install_admin_parser.add_argument("--batch-size", type=_batch_size, default=500)
+    startup_install_admin_parser.set_defaults(handler=install_startup_admin)
+
+    startup_remove_admin_parser = commands.add_parser(
+        "startup-remove-admin",
+        help=argparse.SUPPRESS,
+    )
+    startup_remove_admin_parser.set_defaults(handler=remove_startup_admin)
+
+    startup_stop_admin_parser = commands.add_parser(
+        "startup-stop-admin",
+        help=argparse.SUPPRESS,
+    )
+    startup_stop_admin_parser.set_defaults(
+        handler=lambda args: _stop_system_agent_admin()
+    )
+
+    startup_service_parser = commands.add_parser(
+        "startup-service-run",
+        help=argparse.SUPPRESS,
+    )
+    startup_service_parser.add_argument("--interval", type=_positive_interval, default=60.0)
+    startup_service_parser.add_argument("--batch-size", type=_batch_size, default=500)
+    startup_service_parser.set_defaults(handler=startup_service_run)
 
     startup_run_parser = commands.add_parser(
         "startup-run",
@@ -628,13 +796,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     startup_remove_parser = commands.add_parser(
         "startup-remove",
-        help="Remove the agent's automatic Windows startup task.",
+        help="Remove the system-wide automatic startup task (Administrator approval required).",
     )
     startup_remove_parser.set_defaults(handler=remove_startup)
 
     startup_status_parser = commands.add_parser(
         "startup-status",
-        help="Show the automatic startup task and background-agent state.",
+        help="Show whether system-wide automatic startup is installed.",
     )
     startup_status_parser.set_defaults(handler=startup_status)
 
