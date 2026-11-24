@@ -495,7 +495,9 @@ def install_startup(args) -> int:
     try:
         state = background_status()
         if state["running"]:
-            request_background_stop(timeout=60.0)
+            stopped = request_background_stop(timeout=60.0)
+            if not stopped or background_status()["running"]:
+                raise TimeoutError("The existing per-user collector did not stop.")
     except (RuntimeError, TimeoutError, OSError, ValueError) as exc:
         print(f"Could not stop the existing per-user collector: {exc}")
         print("No system-wide collector was installed.")
@@ -531,6 +533,15 @@ def install_startup(args) -> int:
             except OSError:
                 pass
         print(f"Could not start the elevated BaseSentinel installer: {exc}")
+        try:
+            if 'stopped' in locals() and stopped:
+                start_background_worker(
+                    batch_size=args.batch_size,
+                    interval=args.interval,
+                )
+                print("The existing per-user collector was restarted.")
+        except (RuntimeError, ValueError, OSError) as restart_error:
+            print(f"Could not restart the previous collector: {restart_error}")
         return 1
 
     print("The elevated installer was launched. Complete the Windows UAC prompt to finish setup.")
