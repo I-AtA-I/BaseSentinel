@@ -10,6 +10,8 @@ def test_server_parser_has_foreground_and_startup_commands():
     install_args = parser.parse_args(["startup-install", "--host", "127.0.0.1", "--port", "5055"])
     remove_args = parser.parse_args(["startup-remove"])
     status_args = parser.parse_args(["startup-status"])
+    stop_args = parser.parse_args(["stop"])
+    startup_stop_args = parser.parse_args(["startup-stop"])
 
     assert run_args.host == "127.0.0.1"
     assert run_args.port == 5000
@@ -20,6 +22,8 @@ def test_server_parser_has_foreground_and_startup_commands():
     assert install_args.handler is server.install_startup
     assert remove_args.handler is server.remove_startup
     assert status_args.handler is server.startup_status
+    assert stop_args.handler is server.stop_server
+    assert startup_stop_args.handler is server.stop_automatic_startup
 
 
 def test_server_options_are_validated():
@@ -84,3 +88,29 @@ def test_server_startup_status_reports_task_and_listener(monkeypatch, tmp_path, 
     output = capsys.readouterr().out
     assert "installed" in output
     assert "accepting connections" in output
+
+
+
+def test_server_stop_ends_task_but_keeps_automatic_startup(monkeypatch, capsys):
+    calls = []
+    monkeypatch.setattr(server, "_port_is_listening", lambda _host, _port: True)
+    monkeypatch.setattr(server, "task_exists", lambda _name: True)
+    monkeypatch.setattr(server, "end_task", lambda name: calls.append(name))
+
+    result = server.stop_server(Namespace(host="127.0.0.1", port=5000))
+
+    assert result == 0
+    assert calls == ["BaseSentinel Server"]
+    output = capsys.readouterr().out
+    assert "Automatic startup after sign-in remains enabled" in output
+
+
+def test_server_startup_stop_disables_task_without_stopping_running_server(monkeypatch, capsys):
+    calls = []
+    monkeypatch.setattr(server, "disable_task", lambda name: calls.append(name) or True)
+
+    result = server.stop_automatic_startup(Namespace())
+
+    assert result == 0
+    assert calls == ["BaseSentinel Server"]
+    assert "already running has not been stopped" in capsys.readouterr().out
