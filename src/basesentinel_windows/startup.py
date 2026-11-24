@@ -262,7 +262,8 @@ def build_system_boot_task_xml(
     principals = ET.SubElement(root, _tag("Principals"))
     principal = ET.SubElement(principals, _tag("Principal"), {"id": "System"})
     ET.SubElement(principal, _tag("UserId")).text = "S-1-5-18"
-    ET.SubElement(principal, _tag("LogonType")).text = "ServiceAccount"
+    # schtasks /RU SYSTEM supplies the service-account logon type at registration.
+    # ServiceAccount is accepted by the COM API but rejected by the XML importer.
     ET.SubElement(principal, _tag("RunLevel")).text = "HighestAvailable"
 
     settings = ET.SubElement(root, _tag("Settings"))
@@ -329,7 +330,18 @@ def register_system_boot_task(
             temporary_path = Path(stream.name)
 
         _run_schtasks(
-            ["/Create", "/TN", task_name, "/XML", str(temporary_path), "/F"]
+            [
+                "/Create",
+                "/TN",
+                task_name,
+                "/XML",
+                str(temporary_path),
+                "/RU",
+                "SYSTEM",
+                "/RL",
+                "HIGHEST",
+                "/F",
+            ]
         )
     finally:
         if temporary_path is not None:
@@ -410,6 +422,6 @@ def is_system_boot_task(task_name: str) -> bool:
     has_boot_trigger = root.find(f".//{_tag('BootTrigger')}") is not None
     return (
         user_id == "S-1-5-18"
-        and logon_type == "ServiceAccount"
+        and logon_type in (None, "ServiceAccount")
         and has_boot_trigger
     )
