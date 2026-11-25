@@ -16,8 +16,8 @@ DefaultDirName={autopf}\BaseSentinel
 DefaultGroupName=BaseSentinel
 UninstallDisplayIcon={app}\{#AppExe}
 OutputBaseFilename=BaseSentinel-Client-Setup
-ArchitecturesAllowed=x64
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 MinVersion=10.0.19041
 WizardStyle=modern
@@ -42,4 +42,4 @@ Name: "{group}\Uninstall BaseSentinel"; Filename: "{uninstallexe}"
 Filename: "{app}\BaseSentinelEndpoint.exe"; Description: "Open BaseSentinel Endpoint"; Flags: postinstall nowait skipifsilent runasoriginaluser
 
 [UninstallRun]
-Filename: "{app}\BaseSentinelAgent.exe"; Parameters: "startup-remove"; Flags: runhidden waituntilterminated
+Filename: "{app}\BaseSentinelAgent.exe"; Parameters: "startup-remove"; Flags: runhidden waituntilterminated; RunOnceId: "BaseSentinelStartupCleanup"
