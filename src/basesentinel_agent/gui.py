@@ -1217,7 +1217,11 @@ class AgentWindow:
         self._update_actions()
 
     def _update_actions(self) -> None:
-        idle_task = self.process is None and not self.control_busy
+        idle_task = (
+            self.process is None
+            and not self.control_busy
+            and not self.system_install_result_running
+        )
         self.connect_button.configure(
             state=(
                 "normal"
@@ -1672,7 +1676,7 @@ class AgentWindow:
                 messagebox.showerror(
                     "System-wide installation",
                     "The elevated installer did not report a final result. "
-                    f"Its diagnostic log was left at:\\n{payload}",
+                    f"Its diagnostic log was left at:\n{payload}",
                 )
                 self._refresh_runtime_state()
 
