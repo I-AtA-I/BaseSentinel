@@ -1661,6 +1661,12 @@ def main() -> None:
     try:
         root = tk.Tk()
         root.report_callback_exception = _report_tk_callback_exception
+        if "--self-test" in sys.argv[1:]:
+            root.withdraw()
+            AgentWindow(root)
+            root.update_idletasks()
+            root.destroy()
+            return
         AgentWindow(root)
         root.mainloop()
     except Exception:
