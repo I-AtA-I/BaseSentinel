@@ -39,7 +39,7 @@ Name: "{group}\Install system-wide collector"; Filename: "{app}\BaseSentinelAgen
 Name: "{group}\Uninstall BaseSentinel"; Filename: "{uninstallexe}"
 
 [Run]
-Filename: "{app}\BaseSentinelEndpoint.exe"; Description: "Open BaseSentinel Endpoint"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\BaseSentinelEndpoint.exe"; Description: "Open BaseSentinel Endpoint"; Flags: postinstall nowait skipifsilent runasoriginaluser
 
 [UninstallRun]
 Filename: "{app}\BaseSentinelAgent.exe"; Parameters: "startup-remove"; Flags: runhidden waituntilterminated
