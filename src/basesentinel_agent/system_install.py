@@ -350,6 +350,10 @@ def install_system_agent(
     if not 1 <= batch_size <= 500 or interval <= 0:
         raise ValueError("Invalid agent collection settings.")
 
+    from basesentinel_agent.windows_eventlog import configure_required_audit_policy
+
+    audit_policy_warnings = configure_required_audit_policy()
+
     root = product_root()
     data_dir = machine_data_dir()
     runtime_dir = system_runtime_dir()
@@ -454,6 +458,7 @@ def install_system_agent(
         "data_dir": str(data_dir),
         "started": started,
         "start_error": start_error,
+        "audit_policy_warnings": audit_policy_warnings,
     }
 
 

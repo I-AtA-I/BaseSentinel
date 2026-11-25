@@ -34,6 +34,24 @@ jobs:
         shell: pwsh
         run: .\packaging\windows\build.ps1
 
+      - name: Install test runner
+        shell: pwsh
+        run: python -m pip install pytest
+
+      - name: Run Windows endpoint and packaging tests
+        shell: pwsh
+        run: |
+          python -m pytest tests/test_windows_agent.py tests/test_windows_packaging.py tests/test_agent_startup.py tests/test_background_agent.py -q
+
+      - name: Smoke-test packaged command-line executables
+        shell: pwsh
+        run: |
+          & ".\dist\windows-client\BaseSentinelAgent.exe" --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "The packaged agent CLI failed its startup smoke test." }
+
+          & ".\dist\windows-client\BaseSentinelAgentWorker.exe" --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "The packaged SYSTEM worker failed its startup smoke test." }
+
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:

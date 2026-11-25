@@ -44,6 +44,16 @@ _ALLOWED_EVENT_FIELDS = {
 }
 _MAX_BATCH = 1000
 _PNP_AUDIT_SUBCATEGORY = "{0CCE9248-69AE-11D9-BED3-505054503030}"
+_REQUIRED_AUDIT_POLICIES = (
+    ("Logon", "{0CCE9215-69AE-11D9-BED3-505054503030}", True),
+    ("Special Logon", "{0CCE921B-69AE-11D9-BED3-505054503030}", False),
+    ("Security System Extension", "{0CCE9211-69AE-11D9-BED3-505054503030}", False),
+    ("Audit Policy Change", "{0CCE922F-69AE-11D9-BED3-505054503030}", False),
+    ("User Account Management", "{0CCE9235-69AE-11D9-BED3-505054503030}", True),
+    ("Security Group Management", "{0CCE9237-69AE-11D9-BED3-505054503030}", True),
+    ("Plug and Play Events", "{0CCE9248-69AE-11D9-BED3-505054503030}", False),
+    ("Other System Events", "{0CCE9214-69AE-11D9-BED3-505054503030}", False),
+)
 
 
 def _auditpol_success_enabled(output: str) -> bool:
@@ -89,9 +99,57 @@ def ensure_pnp_audit_activity() -> str:
     if _auditpol_success_enabled(current.stdout):
         return "already-enabled"
 
-    # Collection must never trigger an unexpected UAC prompt or modify machine policy.
-    # An administrator can enable this narrowly scoped audit category separately.
     return "requires-admin"
+
+
+def configure_required_audit_policy() -> list[str]:
+    """Enable only audit subcategories needed by the Windows event collector.
+
+    This function is called by the Administrator-approved system-wide installer.
+    It intentionally does not enable process, object-access, or other high-volume
+    auditing categories that the collector does not currently ingest.
+    """
+    if os.name != "nt":
+        return []
+
+    try:
+        from basesentinel_windows.startup import windows_system_executable
+
+        executable = windows_system_executable("auditpol.exe")
+    except (OSError, RuntimeError, ValueError) as exc:
+        return [f"auditpol: could not locate the Windows audit policy utility: {exc}"]
+
+    warnings = []
+    for name, subcategory, enable_failure in _REQUIRED_AUDIT_POLICIES:
+        command = [
+            executable,
+            "/set",
+            f"/subcategory:{subcategory}",
+            "/success:enable",
+        ]
+        if enable_failure:
+            command.append("/failure:enable")
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=15,
+                check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            warnings.append(f"{name}: {exc}")
+            continue
+
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout).strip()[:300]
+            warnings.append(
+                f"{name}: {detail or f'auditpol exited with code {result.returncode}'}"
+            )
+    return warnings
 
 
 # The only interpolated value is a validated integer Windows EventRecordID.

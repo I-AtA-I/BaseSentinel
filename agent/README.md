@@ -5,9 +5,10 @@ The Windows endpoint agent can run as a single, machine-wide collector under the
 ## Requirements
 
 - Windows 10/11 or Windows Server with Task Scheduler and PowerShell.
-- Python 3.12+ installed on the device.
-- Administrator approval for the system-wide startup installation.
 - A BaseSentinel server reachable over HTTPS (plain HTTP is accepted only for localhost development).
+- Administrator approval for the system-wide startup installation.
+
+The packaged Windows installer includes the Python runtime and GUI dependencies. Python 3.12+ is required only when installing the agent from source with pip.
 
 ## Install
 

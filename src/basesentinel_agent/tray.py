@@ -18,6 +18,10 @@ from basesentinel_agent.background import (
     start_background_worker,
 )
 from basesentinel_agent.storage import AgentConfigStore
+from basesentinel_windows.startup import is_system_boot_task
+
+
+_SYSTEM_STARTUP_TASK_NAME = "BaseSentinel Agent"
 
 
 class AgentTray:
@@ -28,6 +32,7 @@ class AgentTray:
         self.stopping = threading.Event()
         self.last_running: bool | None = None
         self.last_enrolled: bool | None = None
+        self.last_system_wide: bool | None = None
 
     @staticmethod
     def _is_enrolled() -> bool:
@@ -45,7 +50,16 @@ class AgentTray:
             return False, None
         return bool(status.get("running")), status.get("pid")
 
+    @staticmethod
+    def _system_wide_installed() -> bool:
+        try:
+            return is_system_boot_task(_SYSTEM_STARTUP_TASK_NAME)
+        except (OSError, RuntimeError, ValueError):
+            return False
+
     def _status_text(self) -> str:
+        if self._system_wide_installed():
+            return "System-wide collector installed · SYSTEM"
         running, pid = self._running()
         if running:
             return f"Monitoring active · PID {pid or 'unknown'}"
@@ -78,11 +92,17 @@ class AgentTray:
     def _refresh(self) -> None:
         running, _ = self._running()
         enrolled = self._is_enrolled()
-        if running != self.last_running or enrolled != self.last_enrolled:
+        system_wide = self._system_wide_installed()
+        if (
+            running != self.last_running
+            or enrolled != self.last_enrolled
+            or system_wide != self.last_system_wide
+        ):
             self.last_running = running
             self.last_enrolled = enrolled
+            self.last_system_wide = system_wide
             if self.icon is not None:
-                self.icon.icon = self._image(running)
+                self.icon.icon = self._image(running or system_wide)
                 self.icon.title = self._status_text()
                 try:
                     self.icon.update_menu()
@@ -152,7 +172,9 @@ class AgentTray:
             MenuItem(
                 "Resume monitoring",
                 self.resume,
-                visible=lambda item: not self._running()[0],
+                visible=lambda item: (
+                    not self._running()[0] and not self._system_wide_installed()
+                ),
                 enabled=lambda item: self._is_enrolled(),
             ),
             MenuItem(
@@ -165,7 +187,7 @@ class AgentTray:
         )
         self.icon = pystray.Icon(
             "BaseSentinel",
-            self._image(self._running()[0]),
+            self._image(self._running()[0] or self._system_wide_installed()),
             title=self._status_text(),
             menu=menu,
         )
