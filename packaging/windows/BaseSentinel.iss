@@ -35,6 +35,7 @@ Source: "{#AppPayloadDir}\BaseSentinelTray.exe"; DestDir: "{app}"; Flags: ignore
 [Icons]
 Name: "{group}\BaseSentinel Endpoint"; Filename: "{app}\BaseSentinelEndpoint.exe"
 Name: "{group}\BaseSentinel Tray"; Filename: "{app}\BaseSentinelTray.exe"
+Name: "{group}\Install system-wide collector"; Filename: "{app}\BaseSentinelAgent.exe"; Parameters: "startup-install"
 Name: "{group}\Uninstall BaseSentinel"; Filename: "{uninstallexe}"
 
 [Run]
