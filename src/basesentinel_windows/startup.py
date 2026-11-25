@@ -368,7 +368,7 @@ def is_admin() -> bool:
 
 
 def run_elevated(command: Sequence[str]) -> None:
-    """Launch a visible command after an explicit Windows UAC consent prompt."""
+    """Launch a hidden command after an explicit Windows UAC consent prompt."""
     _require_windows()
     if not command or not str(command[0]).strip():
         raise ValueError("An executable is required for elevation.")
