@@ -207,39 +207,72 @@ def test_register_system_boot_task_writes_utf16_and_registers_visible_task(monke
     assert principal.find("task:LogonType", _NAMESPACE) is None
 
 
-def test_system_boot_task_detection_accepts_system_account_with_default_logon_type(monkeypatch):
-    xml_text = startup.build_system_boot_task_xml(
-        "BaseSentinel Agent",
-        [r"C:\ProgramData\BaseSentinel\Runtime\python\pythonw.exe", "start_agent.py"],
-    )
+@pytest.mark.parametrize(("response", "expected"), [("true", True), ("false", False)])
+def test_system_boot_task_detection_uses_task_scheduler_com(
+    monkeypatch, tmp_path, response, expected
+):
     monkeypatch.setattr(startup, "_require_windows", lambda: None)
-    monkeypatch.setattr(
-        startup,
-        "_run_schtasks",
-        lambda args: subprocess.CompletedProcess(args, 0, stdout=xml_text, stderr=""),
-    )
+    monkeypatch.setattr(startup, "task_exists", lambda _name: True)
+    monkeypatch.setattr(startup, "windows_system_directory", lambda: tmp_path)
+    captured = {}
 
-    assert startup.is_system_boot_task("BaseSentinel Agent") is True
+    def fake_run(arguments, **kwargs):
+        captured["arguments"] = arguments
+        return subprocess.CompletedProcess(arguments, 0, stdout=response, stderr="")
+
+    monkeypatch.setattr(startup.subprocess, "run", fake_run)
+
+    assert startup.is_system_boot_task("BaseSentinel Agent") is expected
+    assert captured["arguments"][0].endswith(
+        str(tmp_path / "WindowsPowerShell" / "v1.0" / "powershell.exe")
+    )
+    script = captured["arguments"][-1]
+    assert "GetFolder('\\\\')" in script
+    assert "[int]$_.Type -eq 8" in script
+    assert "[int]$principal.LogonType -eq 5" in script
 
 
-def test_system_boot_task_detection_rejects_non_service_logon_type(monkeypatch):
-    xml_text = startup.build_system_boot_task_xml(
-        "BaseSentinel Agent",
-        [r"C:\ProgramData\BaseSentinel\Runtime\python\pythonw.exe", "start_agent.py"],
-    )
-    xml_text = xml_text.replace(
-        "<UserId>S-1-5-18</UserId>",
-        "<UserId>S-1-5-18</UserId><LogonType>Password</LogonType>",
-    )
+def test_system_boot_task_detection_returns_false_when_task_is_missing(monkeypatch):
     monkeypatch.setattr(startup, "_require_windows", lambda: None)
-    monkeypatch.setattr(
-        startup,
-        "_run_schtasks",
-        lambda args: subprocess.CompletedProcess(args, 0, stdout=xml_text, stderr=""),
-    )
+    monkeypatch.setattr(startup, "task_exists", lambda _name: False)
 
     assert startup.is_system_boot_task("BaseSentinel Agent") is False
 
+
+def test_system_boot_task_detection_does_not_hide_scheduler_errors(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(startup, "_require_windows", lambda: None)
+    monkeypatch.setattr(startup, "task_exists", lambda _name: True)
+    monkeypatch.setattr(startup, "windows_system_directory", lambda: tmp_path)
+
+    def failed_run(arguments, **kwargs):
+        return subprocess.CompletedProcess(
+            arguments, 1, stdout="", stderr="Access is denied"
+        )
+
+    monkeypatch.setattr(startup.subprocess, "run", failed_run)
+
+    with pytest.raises(RuntimeError, match="Access is denied"):
+        startup.is_system_boot_task("BaseSentinel Agent")
+
+
+def test_system_boot_task_detection_rejects_unexpected_scheduler_output(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(startup, "_require_windows", lambda: None)
+    monkeypatch.setattr(startup, "task_exists", lambda _name: True)
+    monkeypatch.setattr(startup, "windows_system_directory", lambda: tmp_path)
+    monkeypatch.setattr(
+        startup.subprocess,
+        "run",
+        lambda arguments, **kwargs: subprocess.CompletedProcess(
+            arguments, 0, stdout="unexpected", stderr=""
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="invalid system-task identity"):
+        startup.is_system_boot_task("BaseSentinel Agent")
 
 
 @pytest.mark.parametrize(("state", "expected"), [("4", True), ("3", False)])
