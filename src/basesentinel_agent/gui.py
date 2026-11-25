@@ -39,7 +39,7 @@ def _write_endpoint_diagnostic(message: str) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
         with path.open("a", encoding="utf-8") as stream:
-            stream.write(f"[{timestamp}] {message.rstrip()}\\n")
+            stream.write(f"[{timestamp}] {message.rstrip()}\n")
     except OSError:
         pass
 
@@ -48,12 +48,12 @@ def _report_tk_callback_exception(exc_type, exc_value, exc_traceback) -> None:
     details = "".join(
         traceback.format_exception(exc_type, exc_value, exc_traceback)
     )
-    _write_endpoint_diagnostic("Unhandled Endpoint GUI callback exception:\\n" + details)
+    _write_endpoint_diagnostic("Unhandled Endpoint GUI callback exception:\n" + details)
     try:
         messagebox.showerror(
             "BaseSentinel Endpoint",
             "An unexpected error occurred in the Endpoint window. "
-            "Details were written to %LOCALAPPDATA%\\\\BaseSentinel.",
+            "Details were written to %LOCALAPPDATA%\\BaseSentinel.",
         )
     except tk.TclError:
         pass
@@ -1141,7 +1141,7 @@ class AgentWindow:
         except Exception as exc:
             details = traceback.format_exc()
             _write_endpoint_diagnostic(
-                "Runtime status check failed: " + str(exc) + "\\n" + details
+                "Runtime status check failed: " + str(exc) + "\n" + details
             )
             payload = {"error": str(exc)}
 
@@ -1672,7 +1672,7 @@ def main() -> None:
     except Exception:
         details = traceback.format_exc()
         _write_endpoint_diagnostic(
-            "Endpoint GUI startup or main loop failed:\\n" + details
+            "Endpoint GUI startup or main loop failed:\n" + details
         )
         message = (
             "BaseSentinel Endpoint could not start.\\n\\n"
