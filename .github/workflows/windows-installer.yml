@@ -43,7 +43,7 @@ jobs:
         run: |
           python -m pytest tests/test_windows_agent.py tests/test_windows_packaging.py tests/test_agent_startup.py tests/test_background_agent.py -q
 
-      - name: Smoke-test packaged command-line executables
+      - name: Smoke-test packaged executables and initialize the GUI
         shell: pwsh
         run: |
           & ".\dist\windows-client\BaseSentinelAgent.exe" --help | Out-Null
@@ -51,6 +51,9 @@ jobs:
 
           & ".\dist\windows-client\BaseSentinelAgentWorker.exe" --help | Out-Null
           if ($LASTEXITCODE -ne 0) { throw "The packaged SYSTEM worker failed its startup smoke test." }
+
+          & ".\dist\windows-client\BaseSentinelEndpoint.exe" --self-test
+          if ($LASTEXITCODE -ne 0) { throw "The packaged Endpoint GUI failed its startup self-test." }
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
