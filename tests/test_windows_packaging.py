@@ -28,6 +28,35 @@ def test_packaged_background_worker_uses_agent_cli_executable(tmp_path, monkeypa
     ]
 
 
+def test_packaged_gui_cli_command_uses_bundled_agent_executable(tmp_path, monkeypatch):
+    agent_executable = tmp_path / "BaseSentinelAgent.exe"
+    agent_executable.write_bytes(b"placeholder")
+    monkeypatch.setattr(background.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(
+        background.sys,
+        "executable",
+        str(tmp_path / "BaseSentinelEndpoint.exe"),
+    )
+
+    assert background.agent_cli_command("diagnostics") == [
+        str(agent_executable),
+        "diagnostics",
+    ]
+
+
+def test_source_gui_cli_command_uses_python_module(monkeypatch):
+    monkeypatch.setattr(background.sys, "frozen", False, raising=False)
+    monkeypatch.setattr(background.sys, "executable", r"C:\Python\python.exe")
+
+    assert background.agent_cli_command("diagnostics") == [
+        r"C:\Python\python.exe",
+        "-u",
+        "-m",
+        "basesentinel_agent.cli",
+        "diagnostics",
+    ]
+
+
 def test_packaged_cli_elevation_relaunches_executable_directly(monkeypatch):
     monkeypatch.setattr(cli.sys, "frozen", True, raising=False)
     monkeypatch.setattr(cli.sys, "executable", r"C:\Program Files\BaseSentinel\BaseSentinelAgent.exe")
