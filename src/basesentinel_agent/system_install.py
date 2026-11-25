@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import base64
 import csv
+import errno
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
+import uuid
 from pathlib import Path
 
 from basesentinel_agent.protection import protect_secret, unprotect_secret
@@ -328,6 +331,41 @@ def _copy_runtime(destination: Path) -> None:
     )
 
 
+def _rename_runtime_when_released(
+    source: Path,
+    destination: Path,
+    *,
+    timeout: float = 15.0,
+) -> None:
+    """Wait for Windows to release Runtime handles before atomically moving it."""
+    deadline = time.monotonic() + timeout
+    last_error: OSError | None = None
+    while True:
+        try:
+            source.rename(destination)
+            return
+        except OSError as exc:
+            # Windows reports ERROR_SHARING_VIOLATION (32) or
+            # ERROR_LOCK_VIOLATION (33) when a running worker still owns files.
+            # EACCES/EBUSY are included for portable tests and filesystem variants.
+            if (
+                getattr(exc, "winerror", None) not in (32, 33)
+                and exc.errno not in (errno.EACCES, errno.EBUSY)
+            ):
+                raise
+            last_error = exc
+
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError(
+                "The existing BaseSentinel Runtime is still in use by another process. "
+                "The installer stopped the scheduled task but Windows did not release "
+                "the files within 15 seconds. Close any remaining BaseSentinel worker "
+                "and retry; the existing Runtime has been left untouched."
+            ) from last_error
+        time.sleep(min(0.5, remaining))
+
+
 def install_system_agent(
     config: dict,
     *,
@@ -378,18 +416,16 @@ def install_system_agent(
         _set_admin_owner(staging)
 
         if task_exists(_TASK_NAME):
-            # The old per-user task may exist from an earlier agent version.
-            # Ending it before the replacement avoids two active collectors.
-            try:
-                end_task(_TASK_NAME)
-            except RuntimeError:
-                pass
+            # Do not continue if Task Scheduler cannot stop the previous worker.
+            # A running worker may keep an executable or DLL in Runtime locked.
+            end_task(_TASK_NAME)
 
         if runtime_dir.exists():
-            backup = root / ".Runtime-backup"
-            if backup.exists():
-                shutil.rmtree(backup)
-            runtime_dir.rename(backup)
+            # Never delete a previous backup before the active Runtime has been
+            # moved successfully. A unique name also preserves backups from an
+            # interrupted earlier installation for manual recovery.
+            backup = root / f".Runtime-backup-{uuid.uuid4().hex}"
+            _rename_runtime_when_released(runtime_dir, backup)
 
         staging.rename(runtime_dir)
         installed_new_runtime = True
