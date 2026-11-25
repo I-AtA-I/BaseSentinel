@@ -153,7 +153,7 @@ def _collect_and_send(
 def collect(args) -> int:
     try:
         audit_state = ensure_pnp_audit_activity()
-        if audit_state == "enabled":
+        if audit_state == "already-enabled":
             print("Windows Plug and Play success auditing enabled.")
         elif audit_state == "requires-admin":
             print(
@@ -285,7 +285,7 @@ def _run_loop(args, stop_event: threading.Event, mode: str) -> int:
     queue = _queue()
     try:
         audit_state = ensure_pnp_audit_activity()
-        if audit_state == "enabled":
+        if audit_state == "already-enabled":
             print("Windows Plug and Play success auditing enabled.")
         elif audit_state == "requires-admin":
             print(
@@ -490,6 +490,9 @@ def _finish_system_install(config: dict, args) -> int:
         print("The startup task is installed, but it could not be started immediately.")
         print(f"Details: {result['start_error']}")
         print("Windows will try again at the next boot.")
+
+    for warning in result.get("audit_policy_warnings", []):
+        print(f"Windows audit policy warning: {warning}")
     return 0 if result["started"] else 1
 
 
@@ -547,7 +550,8 @@ def install_startup(args) -> int:
         print("  - Copy the Python runtime and BaseSentinel agent code to ProgramData\\BaseSentinel\\Runtime.")
         print("  - Store the machine-protected credential, event queue and log in ProgramData\\BaseSentinel\\Data.")
         print("  - Restrict writes to SYSTEM and Administrators; standard users get runtime read/execute only.")
-        print("It will not change audit policy, firewall rules, user accounts or Windows services.")
+        print("  - Enable only the Windows audit categories used by the current event collector.")
+        print("It will not change firewall rules, user accounts or Windows services.")
         print("Windows will now display a UAC prompt for Administrator approval.")
         run_elevated(command)
     except (RuntimeError, ValueError, OSError) as exc:
