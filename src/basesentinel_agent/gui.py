@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import platform
 import queue as thread_queue
 import socket
@@ -7,6 +8,9 @@ import subprocess
 import sys
 import threading
 import tkinter as tk
+import traceback
+from datetime import datetime
+from pathlib import Path
 from tkinter import messagebox, ttk
 
 from basesentinel_agent.background import (
@@ -21,6 +25,38 @@ from basesentinel_agent.storage import AgentConfigStore, default_data_dir
 
 
 _SYSTEM_STARTUP_TASK_NAME = "BaseSentinel Agent"
+
+
+def _endpoint_log_path() -> Path:
+    root = os.environ.get("LOCALAPPDATA") or os.environ.get("TEMP")
+    base = Path(root) if root else Path.home() / "AppData" / "Local"
+    return base / "BaseSentinel" / "endpoint.log"
+
+
+def _write_endpoint_diagnostic(message: str) -> None:
+    try:
+        path = _endpoint_log_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(f"[{timestamp}] {message.rstrip()}\\n")
+    except OSError:
+        pass
+
+
+def _report_tk_callback_exception(exc_type, exc_value, exc_traceback) -> None:
+    details = "".join(
+        traceback.format_exception(exc_type, exc_value, exc_traceback)
+    )
+    _write_endpoint_diagnostic("Unhandled Endpoint GUI callback exception:\\n" + details)
+    try:
+        messagebox.showerror(
+            "BaseSentinel Endpoint",
+            "An unexpected error occurred in the Endpoint window. "
+            "Details were written to %LOCALAPPDATA%\\\\BaseSentinel.",
+        )
+    except tk.TclError:
+        pass
 
 
 COLORS = {
@@ -58,6 +94,7 @@ class AgentWindow:
         self.config_loaded = False
         self.background_running = False
         self.system_wide_installed = False
+        self.runtime_check_running = False
         self.log_offset = 0
 
         self.batch_size = tk.StringVar(value="500")
@@ -79,7 +116,8 @@ class AgentWindow:
 
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.after(150, self._poll_messages)
-        self.root.after(1200, self._periodic_refresh)
+        self.root.after(1500, self._periodic_refresh)
+        self.root.after(10000, self._periodic_runtime_refresh)
 
     def _configure_styles(self) -> None:
         style = ttk.Style(self.root)
@@ -1076,7 +1114,53 @@ class AgentWindow:
         self._update_actions()
 
     def _refresh_runtime_state(self) -> None:
-        self.system_wide_installed = is_system_boot_task(_SYSTEM_STARTUP_TASK_NAME)
+        """Inspect Task Scheduler and the local queue without blocking Tk's UI thread."""
+        if self.closing or self.runtime_check_running:
+            return
+        self.runtime_check_running = True
+        threading.Thread(
+            target=self._runtime_state_worker,
+            name="BaseSentinelRuntimeStatus",
+            daemon=True,
+        ).start()
+
+    def _runtime_state_worker(self) -> None:
+        try:
+            system_wide = is_system_boot_task(_SYSTEM_STARTUP_TASK_NAME)
+            if system_wide:
+                payload = {"system_wide": True}
+            else:
+                state = background_status()
+                pending = len(EventQueue(default_data_dir() / "events.sqlite3"))
+                payload = {
+                    "system_wide": False,
+                    "running": bool(state["running"]),
+                    "pid": state["pid"],
+                    "pending": pending,
+                }
+        except Exception as exc:
+            details = traceback.format_exc()
+            _write_endpoint_diagnostic(
+                "Runtime status check failed: " + str(exc) + "\\n" + details
+            )
+            payload = {"error": str(exc)}
+
+        self.messages.put(("runtime_state", payload))
+
+    def _apply_runtime_state(self, payload: dict) -> None:
+        self.runtime_check_running = False
+        if self.closing:
+            return
+
+        if "error" in payload:
+            self.background_running = False
+            self.pid_value.set("—")
+            self.status_detail.set(f"Status check failed: {payload['error']}")
+            self.queue_value.set("Unavailable")
+            self._update_actions()
+            return
+
+        self.system_wide_installed = bool(payload["system_wide"])
         if self.system_wide_installed:
             self.background_running = True
             self.pid_value.set("SYSTEM")
@@ -1098,23 +1182,9 @@ class AgentWindow:
             self._update_actions()
             return
 
-        try:
-            state = background_status()
-            queue = EventQueue(default_data_dir() / "events.sqlite3")
-            pending = len(queue)
-        except (RuntimeError, OSError, ValueError) as exc:
-            self.background_running = False
-            self.pid_value.set("—")
-            self.status_detail.set(str(exc))
-            self.queue_value.set("Unavailable")
-            self._update_actions()
-            return
-
-        self.background_running = state["running"]
-        self.pid_value.set(str(state["pid"]) if state["pid"] else "—")
-        self.queue_value.set(f"{pending:,} pending")
-        if self.current_page == "queue":
-            self._refresh_queue_table()
+        self.background_running = bool(payload["running"])
+        self.pid_value.set(str(payload["pid"]) if payload["pid"] else "—")
+        self.queue_value.set(f"{payload['pending']:,} pending")
         self.status_text.set("Running" if self.background_running else "Stopped")
 
         if self.background_running:
@@ -1473,6 +1543,9 @@ class AgentWindow:
                 messagebox.showerror("Connection failed", payload)
                 self._update_actions()
 
+            elif kind == "runtime_state":
+                self._apply_runtime_state(payload)
+
             elif kind == "control_result":
                 action, code, output, error = payload
                 self.control_busy = False
@@ -1548,15 +1621,21 @@ class AgentWindow:
                             line.rsplit("pending", 1)[-1].split(";", 1)[0].strip()
                             + " pending"
                         )
-        except OSError:
+        except (OSError, RuntimeError, ValueError) as exc:
+            _write_endpoint_diagnostic(f"Could not read the background agent log: {exc}")
             return
 
     def _periodic_refresh(self) -> None:
         if self.closing:
             return
-        self._refresh_runtime_state()
         self._read_log_updates()
         self.root.after(1500, self._periodic_refresh)
+
+    def _periodic_runtime_refresh(self) -> None:
+        if self.closing:
+            return
+        self._refresh_runtime_state()
+        self.root.after(10000, self._periodic_runtime_refresh)
 
     def open_log_folder(self) -> None:
         path = agent_log_path()
@@ -1578,9 +1657,42 @@ class AgentWindow:
 
 
 def main() -> None:
-    root = tk.Tk()
-    AgentWindow(root)
-    root.mainloop()
+    root = None
+    try:
+        root = tk.Tk()
+        root.report_callback_exception = _report_tk_callback_exception
+        AgentWindow(root)
+        root.mainloop()
+    except Exception:
+        details = traceback.format_exc()
+        _write_endpoint_diagnostic(
+            "Endpoint GUI startup or main loop failed:\\n" + details
+        )
+        message = (
+            "BaseSentinel Endpoint could not start.\\n\\n"
+            "The error details were saved to:\\n"
+            + str(_endpoint_log_path())
+        )
+        try:
+            if os.name == "nt":
+                import ctypes
+
+                ctypes.windll.user32.MessageBoxW(
+                    None,
+                    message,
+                    "BaseSentinel Endpoint",
+                    0x10,
+                )
+            else:
+                messagebox.showerror("BaseSentinel Endpoint", message)
+        except Exception:
+            pass
+        if root is not None:
+            try:
+                root.destroy()
+            except tk.TclError:
+                pass
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
