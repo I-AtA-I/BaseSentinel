@@ -589,11 +589,13 @@ def test_required_audit_policy_uses_only_collector_subcategories(monkeypatch):
 
     assert windows_eventlog.configure_required_audit_policy() == []
     assert len(calls) == len(windows_eventlog._REQUIRED_AUDIT_POLICIES)
-    assert calls[0][0][1:3] == [
+    assert calls[0][0][1:4] == [
         "/set",
         f"/subcategory:{windows_eventlog._REQUIRED_AUDIT_POLICIES[0][1]}",
+        "/success:enable",
     ]
-    assert calls[0][0][-2:] == ["/success:enable", "/failure:enable"]
+    assert calls[0][0][-1] == "/failure:enable"
+    assert all("/failure:disable" not in call[0] for call in calls)
     assert all(call[1]["timeout"] == 15 for call in calls)
 
 
