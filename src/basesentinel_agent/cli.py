@@ -613,8 +613,8 @@ def install_startup_admin(args) -> int:
 
         result_text = captured_output.getvalue().rstrip()
         if result_text:
-            result_text += "\\n"
-        result_text += f"BASESENTINEL_INSTALL_EXIT_CODE={exit_code}\\n"
+            result_text += "\n"
+        result_text += f"BASESENTINEL_INSTALL_EXIT_CODE={exit_code}\n"
         result_path.parent.mkdir(parents=True, exist_ok=True)
         result_path.write_text(result_text, encoding="utf-8")
         return exit_code
