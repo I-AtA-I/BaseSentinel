@@ -24,7 +24,7 @@ if (-not (Test-Path $PyInstaller)) {
 
 & $Python -m pip install --upgrade pip
 if ($LASTEXITCODE -ne 0) { throw "Could not upgrade pip." }
-& $Python -m pip install -e "$RepositoryRoot[build]"
+& $Python -m pip install -e "$($RepositoryRoot)[build]"
 if ($LASTEXITCODE -ne 0) { throw "Could not install BaseSentinel build dependencies." }
 
 if (Test-Path $OutputDirectory) {
