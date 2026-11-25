@@ -155,13 +155,14 @@ def seeded_dashboard(app, users):
         ))
 
         # One event outside the one-hour period.
-        events.append(ingest(
+        outside_period_event = ingest(
             agent_two,
             timestamp_at(base, -120),
             "system",
             "security.critical",
             10,
-        ))
+        )
+        events.append(outside_period_event)
 
         # One future event. It must not be included in analytics.
         events.append(ingest(
@@ -181,7 +182,10 @@ def seeded_dashboard(app, users):
         acknowledged_alert.acknowledged_at = utcnow_naive()
 
         # Keep one open alert outside the selected analytics period.
-        open_alert = Alert.query.filter_by(status="open").one()
+        open_alert = Alert.query.filter_by(
+            source_event_id=outside_period_event.id,
+            status="open",
+        ).one()
         old_alert_time = (base - timedelta(days=2)).replace(tzinfo=None)
         open_alert.first_seen_at = old_alert_time
         open_alert.last_seen_at = old_alert_time
