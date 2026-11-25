@@ -248,3 +248,31 @@ def test_restore_user_worker_starts_previous_collector_when_system_task_is_absen
     assert result == 0
     assert started == [{"batch_size": 250, "interval": 30.0}]
     assert "restored (PID 1234)" in capsys.readouterr().out
+
+
+
+def test_start_system_agent_runs_existing_task_when_elevated(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "is_system_boot_task", lambda _name: True)
+    monkeypatch.setattr(cli, "is_admin", lambda: True)
+    started = []
+    monkeypatch.setattr(cli, "run_task", lambda name: started.append(name))
+
+    result = cli.start_system_agent(Namespace())
+
+    assert result == 0
+    assert started == ["BaseSentinel Agent"]
+    assert "start was requested" in capsys.readouterr().out
+
+
+def test_start_system_agent_requests_elevation_for_standard_user(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "is_system_boot_task", lambda _name: True)
+    monkeypatch.setattr(cli, "is_admin", lambda: False)
+    commands = []
+    monkeypatch.setattr(cli, "_cli_command", lambda *args: list(args))
+    monkeypatch.setattr(cli, "run_elevated", lambda command: commands.append(command))
+
+    result = cli.start_system_agent(Namespace())
+
+    assert result == 0
+    assert commands == [["startup-start-admin"]]
+    assert "UAC prompt" in capsys.readouterr().out
