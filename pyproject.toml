@@ -23,6 +23,9 @@ dependencies = [
 dev = [
     "pytest>=8.0"
 ]
+build = [
+    "pyinstaller>=6.16"
+]
 
 [project.scripts]
 basesentinel-agent = "basesentinel_agent.cli:main"
