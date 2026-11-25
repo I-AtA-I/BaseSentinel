@@ -573,6 +573,53 @@ def test_auditpol_success_setting_detection():
     assert not _auditpol_success_enabled("Plug and Play Events,No Auditing")
 
 
+def test_required_audit_policy_uses_only_collector_subcategories(monkeypatch):
+    from basesentinel_agent import windows_eventlog
+    from basesentinel_windows import startup
+
+    monkeypatch.setattr(windows_eventlog.os, "name", "nt")
+    monkeypatch.setattr(startup, "windows_system_executable", lambda name: f"C:/Windows/System32/{name}")
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append((args, kwargs))
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(windows_eventlog.subprocess, "run", fake_run)
+
+    assert windows_eventlog.configure_required_audit_policy() == []
+    assert len(calls) == len(windows_eventlog._REQUIRED_AUDIT_POLICIES)
+    assert calls[0][0][1:3] == [
+        "/set",
+        f"/subcategory:{windows_eventlog._REQUIRED_AUDIT_POLICIES[0][1]}",
+    ]
+    assert calls[0][0][-2:] == ["/success:enable", "/failure:enable"]
+    assert all(call[1]["timeout"] == 15 for call in calls)
+
+
+def test_required_audit_policy_returns_warnings_when_windows_rejects_a_setting(monkeypatch):
+    from basesentinel_agent import windows_eventlog
+    from basesentinel_windows import startup
+
+    monkeypatch.setattr(windows_eventlog.os, "name", "nt")
+    monkeypatch.setattr(startup, "windows_system_executable", lambda name: name)
+    monkeypatch.setattr(
+        windows_eventlog.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            args=["auditpol.exe"],
+            returncode=5,
+            stdout="",
+            stderr="Access is denied.",
+        ),
+    )
+
+    warnings = windows_eventlog.configure_required_audit_policy()
+
+    assert len(warnings) == len(windows_eventlog._REQUIRED_AUDIT_POLICIES)
+    assert all("Access is denied." in warning for warning in warnings)
+
+
 def test_ensure_pnp_audit_activity_skips_when_already_enabled(monkeypatch):
     from basesentinel_agent import windows_eventlog
 
