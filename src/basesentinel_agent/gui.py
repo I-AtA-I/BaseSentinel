@@ -4,18 +4,23 @@ import platform
 import queue as thread_queue
 import socket
 import subprocess
+import sys
 import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
 
 from basesentinel_agent.background import (
+    agent_cli_command,
     agent_log_path,
     background_status,
-    console_python_executable,
 )
+from basesentinel_windows.startup import is_system_boot_task
 from basesentinel_agent.client import AgentApiError, BaseSentinelClient
 from basesentinel_agent.queue import EventQueue
 from basesentinel_agent.storage import AgentConfigStore, default_data_dir
+
+
+_SYSTEM_STARTUP_TASK_NAME = "BaseSentinel Agent"
 
 
 COLORS = {
@@ -52,6 +57,7 @@ class AgentWindow:
         self.closing = False
         self.config_loaded = False
         self.background_running = False
+        self.system_wide_installed = False
         self.log_offset = 0
 
         self.batch_size = tk.StringVar(value="500")
@@ -309,7 +315,7 @@ class AgentWindow:
         ).pack(anchor="w")
         tk.Label(
             info,
-            text="Windows Security\n4624 · 4625\n4672 · 4720",
+            text="Windows Security +\nMicrosoft Defender\nAllowlisted events",
             justify="left",
             bg=COLORS["panel"],
             fg=COLORS["text"],
@@ -318,7 +324,7 @@ class AgentWindow:
         ).pack(anchor="w")
         tk.Label(
             info,
-            text="Runs under the current Windows user.",
+            text="The system-wide collector runs as Windows SYSTEM after Administrator approval.",
             justify="left",
             wraplength=175,
             bg=COLORS["panel"],
@@ -880,7 +886,11 @@ class AgentWindow:
         controls.pack(fill="x")
         self.start_button = ttk.Button(
             controls,
-            text="Start background",
+            text=(
+                "Install system-wide collector"
+                if getattr(sys, "frozen", False)
+                else "Start background"
+            ),
             style="Accent.TButton",
             command=self.start_background,
         )
@@ -1066,11 +1076,35 @@ class AgentWindow:
         self._update_actions()
 
     def _refresh_runtime_state(self) -> None:
+        self.system_wide_installed = is_system_boot_task(_SYSTEM_STARTUP_TASK_NAME)
+        if self.system_wide_installed:
+            self.background_running = True
+            self.pid_value.set("SYSTEM")
+            self.queue_value.set("Protected")
+            self.status_text.set("System-wide")
+            self.status_detail.set(
+                "System collector installed to run as SYSTEM at Windows boot"
+            )
+            self.header_status.configure(
+                text="●  SYSTEM COLLECTOR INSTALLED",
+                bg="#15352f",
+                fg=COLORS["success"],
+            )
+            self.sidebar_status_dot.configure(fg=COLORS["success"])
+            self.sidebar_status_label.configure(
+                text="System-wide collector installed",
+                fg=COLORS["success"],
+            )
+            self._update_actions()
+            return
+
         try:
             state = background_status()
             queue = EventQueue(default_data_dir() / "events.sqlite3")
             pending = len(queue)
         except (RuntimeError, OSError, ValueError) as exc:
+            self.background_running = False
+            self.pid_value.set("—")
             self.status_detail.set(str(exc))
             self.queue_value.set("Unavailable")
             self._update_actions()
@@ -1211,13 +1245,13 @@ class AgentWindow:
         if self.process is not None or self.control_busy:
             return
 
-        command = [
-            console_python_executable(),
-            "-u",
-            "-m",
-            "basesentinel_agent.cli",
-            *arguments,
-        ]
+        try:
+            command = agent_cli_command(*arguments)
+        except (OSError, RuntimeError) as exc:
+            self._append_activity(f"Could not start {task}: {exc}", "error")
+            messagebox.showerror("Could not start task", str(exc))
+            return
+
         try:
             process = subprocess.Popen(
                 command,
@@ -1266,18 +1300,20 @@ class AgentWindow:
     def _run_control(self, action: str, arguments: list[str]) -> None:
         if self.control_busy or self.process is not None:
             return
+        try:
+            command = agent_cli_command(*arguments)
+        except (OSError, RuntimeError) as exc:
+            self._append_activity(f"{action.title()} failed: {exc}", "error")
+            messagebox.showerror("Background agent", str(exc))
+            return
+
         self.control_busy = True
         self.status_detail.set(
-            "Starting background worker…" if action == "start"
+            "Requesting Administrator approval…" if action == "install"
+            else "Starting background worker…" if action == "start"
             else "Requesting graceful shutdown…"
         )
         self._update_actions()
-        command = [
-            console_python_executable(),
-            "-m",
-            "basesentinel_agent.cli",
-            *arguments,
-        ]
         threading.Thread(
             target=self._control_worker,
             args=(action, command),
@@ -1324,10 +1360,22 @@ class AgentWindow:
             f"Starting windowless background agent (batch {batch}, interval {interval}s)…",
             "info",
         )
-        self._run_control(
-            "start",
-            ["start", "--batch-size", str(batch), "--interval", str(interval)],
-        )
+        if getattr(sys, "frozen", False):
+            self._run_control(
+                "install",
+                [
+                    "startup-install",
+                    "--batch-size",
+                    str(batch),
+                    "--interval",
+                    str(interval),
+                ],
+            )
+        else:
+            self._run_control(
+                "start",
+                ["start", "--batch-size", str(batch), "--interval", str(interval)],
+            )
 
     def stop_background(self) -> None:
         self._append_activity("Requesting background worker shutdown…", "info")
@@ -1411,7 +1459,11 @@ class AgentWindow:
                 self._append_activity("Device enrollment completed successfully.", "success")
                 self.invitation.delete(0, "end")
                 self.invitation_code.delete(0, "end")
-                self.status_detail.set("Device enrolled. Start background monitoring when ready.")
+                self.status_detail.set(
+                    "Device enrolled. Install the system-wide collector to enable monitoring."
+                    if getattr(sys, "frozen", False)
+                    else "Device enrolled. Start background monitoring when ready."
+                )
                 self._update_actions()
 
             elif kind == "enrollment_error":
@@ -1426,6 +1478,15 @@ class AgentWindow:
                 self.control_busy = False
                 if action == "start" and code == 0:
                     self._append_activity("Agent started successfully.", "success")
+                elif action == "install" and code == 0:
+                    self._append_activity(
+                        "System-wide collector setup was launched. Approve the Windows UAC prompt if requested.",
+                        "success",
+                    )
+                    for line in output.splitlines():
+                        self._append_activity(line, "info")
+                    if error:
+                        self._append_activity(error, "error")
                 else:
                     if output:
                         for line in output.splitlines():
