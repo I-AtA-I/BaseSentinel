@@ -196,3 +196,53 @@ def test_elevated_system_install_writes_result_log_and_removes_bootstrap(
     assert "SYSTEM installation completed" in output
     assert "BASESENTINEL_INSTALL_EXIT_CODE=0" in output
     assert not bootstrap.exists()
+
+
+
+def test_restore_user_worker_skips_when_system_task_exists(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "is_system_boot_task", lambda _name: True)
+    started = []
+    monkeypatch.setattr(
+        cli,
+        "start_background_worker",
+        lambda **kwargs: started.append(kwargs),
+    )
+
+    result = cli.restore_user_worker(
+        Namespace(interval=30.0, batch_size=250)
+    )
+
+    assert result == 0
+    assert started == []
+    assert "system-wide collector is registered" in capsys.readouterr().out
+
+
+def test_restore_user_worker_starts_previous_collector_when_system_task_is_absent(
+    monkeypatch,
+    capsys,
+):
+    monkeypatch.setattr(cli, "is_system_boot_task", lambda _name: False)
+    monkeypatch.setattr(
+        cli.AgentConfigStore,
+        "load",
+        lambda self: {"server_url": "https://siem.example.com"},
+    )
+    monkeypatch.setattr(
+        cli,
+        "background_status",
+        lambda: {"running": False, "pid": None},
+    )
+    started = []
+    monkeypatch.setattr(
+        cli,
+        "start_background_worker",
+        lambda **kwargs: started.append(kwargs) or 1234,
+    )
+
+    result = cli.restore_user_worker(
+        Namespace(interval=30.0, batch_size=250)
+    )
+
+    assert result == 0
+    assert started == [{"batch_size": 250, "interval": 30.0}]
+    assert "restored (PID 1234)" in capsys.readouterr().out
