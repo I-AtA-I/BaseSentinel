@@ -185,3 +185,61 @@ def test_task_scheduler_command_times_out_instead_of_waiting_forever(monkeypatch
         raise AssertionError("A Task Scheduler timeout must be reported.")
 
     assert calls[0][1]["timeout"] == 5
+
+
+
+def test_admin_install_result_file_is_restricted_to_user_admin_and_system(
+    tmp_path,
+    monkeypatch,
+):
+    from basesentinel_windows import startup
+
+    bootstrap = tmp_path / "handoff.json"
+    bootstrap.write_text("temporary", encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(system_install, "_current_user_sid", lambda: "S-1-5-21-123")
+    monkeypatch.setattr(
+        startup,
+        "windows_system_executable",
+        lambda name: f"C:/Windows/System32/{name}",
+    )
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(system_install.subprocess, "run", fake_run)
+    result_file = system_install.create_admin_result_file(bootstrap)
+
+    assert result_file == tmp_path / "handoff.result.log"
+    assert result_file.is_file()
+    assert calls[0][0][0] == "C:/Windows/System32/icacls.exe"
+    assert "*S-1-5-21-123:(F)" in calls[0][0]
+    assert "*S-1-5-32-544:(F)" in calls[0][0]
+    assert "*S-1-5-18:(F)" in calls[0][0]
+
+
+def test_gui_waits_for_elevated_system_install_result_without_touching_tk(
+    tmp_path,
+):
+    from basesentinel_agent import gui
+
+    result_file = tmp_path / "install.result.log"
+    result_file.write_text(
+        "BaseSentinel system-wide automatic startup is installed.\n"
+        "BASESENTINEL_INSTALL_EXIT_CODE=0\n",
+        encoding="utf-8",
+    )
+    app = gui.AgentWindow.__new__(gui.AgentWindow)
+    app.closing = False
+    app.messages = queue.Queue()
+
+    app._watch_system_install_result(str(result_file))
+
+    kind, payload = app.messages.get_nowait()
+    assert kind == "install_result"
+    assert payload == (
+        str(result_file),
+        0,
+        "BaseSentinel system-wide automatic startup is installed.",
+    )
