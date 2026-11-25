@@ -227,7 +227,7 @@ def test_system_boot_task_detection_uses_task_scheduler_com(
         str(tmp_path / "WindowsPowerShell" / "v1.0" / "powershell.exe")
     )
     script = captured["arguments"][-1]
-    assert "GetFolder('\\\\')" in script
+    assert r"GetFolder('\')" in script
     assert "[int]$_.Type -eq 8" in script
     assert "[int]$principal.LogonType -eq 5" in script
 
