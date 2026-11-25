@@ -261,4 +261,4 @@ def test_system_task_running_state_uses_task_scheduler_api(
         str(tmp_path / "WindowsPowerShell" / "v1.0" / "powershell.exe")
     )
     assert captured["arguments"][-2] == "-Command"
-    assert "GetFolder('\\\\')" in captured["arguments"][-1]
+    assert "GetFolder(" + chr(39) + chr(92) + chr(39) + ")" in captured["arguments"][-1]
