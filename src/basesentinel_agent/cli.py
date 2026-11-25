@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import io
 import math
 import os
 import platform
 import socket
 import sys
 import threading
+import traceback
 from pathlib import Path
 from contextlib import redirect_stderr, redirect_stdout
 
@@ -531,14 +533,21 @@ def install_startup(args) -> int:
         return result
 
     bootstrap_path = None
+    result_path = None
     try:
-        from basesentinel_agent.system_install import create_admin_bootstrap
+        from basesentinel_agent.system_install import (
+            create_admin_bootstrap,
+            create_admin_result_file,
+        )
 
         bootstrap_path = create_admin_bootstrap(config)
+        result_path = create_admin_result_file(bootstrap_path)
         command = _cli_command(
             "startup-install-admin",
             "--bootstrap-file",
             str(bootstrap_path),
+            "--result-file",
+            str(result_path),
             "--interval",
             str(args.interval),
             "--batch-size",
@@ -555,11 +564,12 @@ def install_startup(args) -> int:
         print("Windows will now display a UAC prompt for Administrator approval.")
         run_elevated(command)
     except (RuntimeError, ValueError, OSError) as exc:
-        if bootstrap_path is not None:
-            try:
-                bootstrap_path.unlink()
-            except OSError:
-                pass
+        for temporary_path in (bootstrap_path, result_path):
+            if temporary_path is not None:
+                try:
+                    temporary_path.unlink()
+                except OSError:
+                    pass
         print(f"Could not start the elevated BaseSentinel installer: {exc}")
         try:
             if stopped:
@@ -573,22 +583,43 @@ def install_startup(args) -> int:
         return 1
 
     print("The elevated installer was launched. Complete the Windows UAC prompt to finish setup.")
+    print(f"BASESENTINEL_INSTALL_RESULT_FILE={result_path}")
     return 0
 
 
 def install_startup_admin(args) -> int:
-    """Elevated continuation of the visible all-users installation."""
+    """Elevated continuation of the all-users installation, with a durable result log."""
     from basesentinel_agent.system_install import read_admin_bootstrap
 
     bootstrap_path = Path(args.bootstrap_file)
+    result_path = (
+        Path(args.result_file)
+        if args.result_file
+        else bootstrap_path.with_suffix(".result.log")
+    )
+    captured_output = io.StringIO()
+    exit_code = 1
     try:
-        config = read_admin_bootstrap(bootstrap_path)
-        if not is_admin():
-            print("The elevated installer did not receive an Administrator token.")
-            return 1
-        return _finish_system_install(config, args)
-    except (RuntimeError, ValueError, OSError) as exc:
-        print(f"System-wide BaseSentinel installation failed: {exc}")
+        with redirect_stdout(captured_output), redirect_stderr(captured_output):
+            try:
+                config = read_admin_bootstrap(bootstrap_path)
+                if not is_admin():
+                    print("The elevated installer did not receive an Administrator token.")
+                else:
+                    exit_code = _finish_system_install(config, args)
+            except Exception:
+                print("System-wide BaseSentinel installation failed:")
+                traceback.print_exc(file=captured_output)
+
+        result_text = captured_output.getvalue().rstrip()
+        if result_text:
+            result_text += "\n"
+        result_text += f"BASESENTINEL_INSTALL_EXIT_CODE={exit_code}\n"
+        result_path.parent.mkdir(parents=True, exist_ok=True)
+        result_path.write_text(result_text, encoding="utf-8")
+        return exit_code
+    except OSError as exc:
+        print(f"Could not save the system installation result log: {exc}")
         return 1
     finally:
         try:
@@ -649,6 +680,32 @@ def remove_startup_admin(args) -> int:
     else:
         print("BaseSentinel automatic startup was not installed.")
     return 0
+
+def restore_user_worker(args) -> int:
+    """Restore the previous per-user collector only when no SYSTEM task was registered."""
+    try:
+        if is_system_boot_task(_STARTUP_TASK_NAME):
+            print(
+                "A system-wide collector is registered; the per-user worker was not restarted."
+            )
+            return 0
+
+        AgentConfigStore(machine_scope=False).load()
+        state = background_status()
+        if state["running"]:
+            print("The previous per-user collector is already running.")
+            return 0
+
+        pid = start_background_worker(
+            batch_size=args.batch_size,
+            interval=args.interval,
+        )
+        print(f"The previous per-user collector was restored (PID {pid}).")
+        return 0
+    except (RuntimeError, ValueError, OSError) as exc:
+        print(f"Could not restore the previous per-user collector: {exc}")
+        return 1
+
 
 def startup_status(args) -> int:
     try:
@@ -802,6 +859,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=argparse.SUPPRESS,
     )
     startup_install_admin_parser.add_argument("--bootstrap-file", required=True)
+    startup_install_admin_parser.add_argument("--result-file")
     startup_install_admin_parser.add_argument("--interval", type=_positive_interval, default=60.0)
     startup_install_admin_parser.add_argument("--batch-size", type=_batch_size, default=500)
     startup_install_admin_parser.set_defaults(handler=install_startup_admin)
@@ -847,6 +905,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show whether system-wide automatic startup is installed.",
     )
     startup_status_parser.set_defaults(handler=startup_status)
+
+    restore_user_parser = commands.add_parser(
+        "startup-restore-user-worker",
+        help=argparse.SUPPRESS,
+    )
+    restore_user_parser.add_argument("--interval", type=_positive_interval, default=60.0)
+    restore_user_parser.add_argument("--batch-size", type=_batch_size, default=500)
+    restore_user_parser.set_defaults(handler=restore_user_worker)
 
     worker_parser = commands.add_parser(
         "_background-worker",

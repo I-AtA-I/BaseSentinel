@@ -256,6 +256,52 @@ def create_admin_bootstrap(config: dict) -> Path:
     return path
 
 
+def create_admin_result_file(bootstrap_path: str | Path) -> Path:
+    """Create a result log readable by the enrolled user and the elevated installer."""
+    from basesentinel_windows.startup import windows_system_executable
+
+    result_path = Path(bootstrap_path).with_suffix(".result.log")
+    try:
+        with result_path.open("x", encoding="utf-8"):
+            pass
+        result = subprocess.run(
+            [
+                windows_system_executable("icacls.exe"),
+                str(result_path),
+                "/inheritance:r",
+                "/grant:r",
+                f"*{_current_user_sid()}:(F)",
+                "*S-1-5-32-544:(F)",
+                "*S-1-5-18:(F)",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except OSError as exc:
+        try:
+            result_path.unlink()
+        except OSError:
+            pass
+        raise RuntimeError(
+            f"Could not prepare the system installation result log: {exc}"
+        ) from exc
+
+    if result.returncode != 0:
+        details = (result.stderr or result.stdout).strip()[-500:]
+        try:
+            result_path.unlink()
+        except OSError:
+            pass
+        raise RuntimeError(
+            "Could not protect the system installation result log."
+            + (f" Details: {details}" if details else "")
+        )
+    return result_path
+
+
 def read_admin_bootstrap(path: str | Path) -> dict:
     """Read and decrypt the one-time enrollment handoff in the elevated process."""
     bootstrap_path = Path(path)
