@@ -41,6 +41,13 @@ def _queue() -> EventQueue:
     return EventQueue(default_data_dir() / "events.sqlite3")
 
 
+def _cli_command(*arguments: str) -> list[str]:
+    """Build a child command for either a Python install or a frozen executable."""
+    if getattr(sys, "frozen", False):
+        return [sys.executable, *arguments]
+    return [sys.executable, "-m", "basesentinel_agent.cli", *arguments]
+
+
 def _client_from_config() -> BaseSentinelClient:
     config = AgentConfigStore().load()
     return BaseSentinelClient(config["server_url"], config["token"])
@@ -417,12 +424,7 @@ def stop_background(args) -> int:
     try:
         if is_system_boot_task(_STARTUP_TASK_NAME):
             if not is_admin():
-                run_elevated([
-                    sys.executable,
-                    "-m",
-                    "basesentinel_agent.cli",
-                    "startup-stop-admin",
-                ])
+                run_elevated(_cli_command("startup-stop-admin"))
                 print("The elevated stop tool was launched. Approve the Windows UAC prompt to stop the collector.")
                 return 0
             end_task(_STARTUP_TASK_NAME)
@@ -530,10 +532,7 @@ def install_startup(args) -> int:
         from basesentinel_agent.system_install import create_admin_bootstrap
 
         bootstrap_path = create_admin_bootstrap(config)
-        command = [
-            sys.executable,
-            "-m",
-            "basesentinel_agent.cli",
+        command = _cli_command(
             "startup-install-admin",
             "--bootstrap-file",
             str(bootstrap_path),
@@ -541,7 +540,7 @@ def install_startup(args) -> int:
             str(args.interval),
             "--batch-size",
             str(args.batch_size),
-        ]
+        )
         print("Administrator approval is required to install the all-users collector.")
         print("The elevated installer will:")
         print("  - Create the visible 'BaseSentinel Agent' task, running as SYSTEM at Windows boot.")
@@ -618,12 +617,7 @@ def remove_startup(args) -> int:
     """Remove the system-wide startup task after explicit Administrator approval."""
     if not is_admin():
         try:
-            run_elevated([
-                sys.executable,
-                "-m",
-                "basesentinel_agent.cli",
-                "startup-remove-admin",
-            ])
+            run_elevated(_cli_command("startup-remove-admin"))
         except (RuntimeError, ValueError, OSError) as exc:
             print(f"Could not request Administrator approval: {exc}")
             return 1

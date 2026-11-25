@@ -281,6 +281,16 @@ def read_admin_bootstrap(path: str | Path) -> dict:
 
 
 def _copy_runtime(destination: Path) -> None:
+    if getattr(sys, "frozen", False):
+        worker_executable = Path(sys.executable).with_name("BaseSentinelAgentWorker.exe")
+        if not worker_executable.is_file():
+            raise RuntimeError(
+                "The packaged BaseSentinel worker executable is missing. "
+                "Repair or reinstall BaseSentinel before enabling system-wide startup."
+            )
+        shutil.copy2(worker_executable, destination / worker_executable.name)
+        return
+
     python_home = Path(sys.base_prefix).resolve()
     python_exe = python_home / "python.exe"
     pythonw_exe = python_home / "pythonw.exe"
@@ -389,17 +399,28 @@ def install_system_agent(
             config["agent_id"],
         )
 
-        pythonw = runtime_dir / "python" / "pythonw.exe"
-        register_system_boot_task(
-            _TASK_NAME,
-            [
+        if getattr(sys, "frozen", False):
+            worker_command = [
+                str(runtime_dir / "BaseSentinelAgentWorker.exe"),
+                "--interval",
+                str(interval),
+                "--batch-size",
+                str(batch_size),
+            ]
+        else:
+            pythonw = runtime_dir / "python" / "pythonw.exe"
+            worker_command = [
                 str(pythonw),
                 str(runtime_dir / "start_agent.py"),
                 "--interval",
                 str(interval),
                 "--batch-size",
                 str(batch_size),
-            ],
+            ]
+
+        register_system_boot_task(
+            _TASK_NAME,
+            worker_command,
             working_directory=runtime_dir,
             description=(
                 "Run the BaseSentinel endpoint collector as LocalSystem at Windows startup. "

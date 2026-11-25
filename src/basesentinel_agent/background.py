@@ -313,6 +313,42 @@ def _read_log_tail(path: Path, limit: int = 2500) -> str:
         return ""
 
 
+def _background_worker_command(
+    *,
+    interval: float,
+    batch_size: int,
+    python_executable: str | None = None,
+) -> list[str]:
+    """Build the worker command for source installs and packaged Windows clients."""
+    if getattr(sys, "frozen", False):
+        executable = Path(sys.executable).with_name("BaseSentinelAgent.exe")
+        if not executable.is_file():
+            raise RuntimeError(
+                "The BaseSentinel agent executable is missing. Repair or reinstall the application."
+            )
+        return [
+            str(executable),
+            "_background-worker",
+            "--interval",
+            str(interval),
+            "--batch-size",
+            str(batch_size),
+        ]
+
+    executable = windowless_python_executable(python_executable)
+    return [
+        executable,
+        "-u",
+        "-m",
+        "basesentinel_agent.cli",
+        "_background-worker",
+        "--interval",
+        str(interval),
+        "--batch-size",
+        str(batch_size),
+    ]
+
+
 def start_background_worker(
     batch_size: int = 500,
     interval: float = 60.0,
@@ -350,18 +386,11 @@ def start_background_worker(
         except FileNotFoundError:
             pass
 
-    executable = windowless_python_executable(python_executable)
-    command = [
-        executable,
-        "-u",
-        "-m",
-        "basesentinel_agent.cli",
-        "_background-worker",
-        "--interval",
-        str(interval),
-        "--batch-size",
-        str(batch_size),
-    ]
+    command = _background_worker_command(
+        interval=interval,
+        batch_size=batch_size,
+        python_executable=python_executable,
+    )
 
     with paths["log"].open("a", encoding="utf-8", buffering=1) as log_file:
         flags = 0

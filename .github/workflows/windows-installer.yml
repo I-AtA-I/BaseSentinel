@@ -1,0 +1,43 @@
+name: Windows client installer
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build-installer:
+    name: Build Windows x64 installer
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build client installer
+        shell: pwsh
+        run: .\packaging\windows\build.ps1
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: BaseSentinel-Windows-Client
+          path: dist/windows-client/installer/BaseSentinel-Client-Setup.exe
+          if-no-files-found: error
+          retention-days: 30

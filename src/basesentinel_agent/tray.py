@@ -95,13 +95,18 @@ class AgentTray:
 
     def open_console(self, icon, item) -> None:
         try:
-            executable = sys.executable
-            if os.name == "nt" and Path(executable).name.lower() == "python.exe":
-                candidate = Path(executable).with_name("pythonw.exe")
-                if candidate.is_file():
-                    executable = str(candidate)
+            if getattr(sys, "frozen", False):
+                executable = str(Path(sys.executable).with_name("BaseSentinelEndpoint.exe"))
+                command = [executable]
+            else:
+                executable = sys.executable
+                if os.name == "nt" and Path(executable).name.lower() == "python.exe":
+                    candidate = Path(executable).with_name("pythonw.exe")
+                    if candidate.is_file():
+                        executable = str(candidate)
+                command = [executable, "-m", "basesentinel_agent.gui"]
             subprocess.Popen(
-                [executable, "-m", "basesentinel_agent.gui"],
+                command,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,

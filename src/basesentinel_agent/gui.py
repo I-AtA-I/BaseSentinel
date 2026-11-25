@@ -519,7 +519,7 @@ class AgentWindow:
         ).pack(fill="x", pady=(4, 10))
         tk.Label(
             scope,
-            text="The background worker stays visible in Task Manager and runs independently of this window. Use the agent CLI to configure automatic startup after this Windows user signs in.",
+            text="The background worker runs independently of this window. After enrollment, use Install system-wide collector from the Start menu to enable one protected collector at Windows boot. Administrator approval is required.",
             bg=COLORS["panel_alt"],
             fg=COLORS["muted"],
             justify="left",
