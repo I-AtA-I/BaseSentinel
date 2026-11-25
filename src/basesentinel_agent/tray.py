@@ -187,7 +187,7 @@ class AgentTray:
         )
         self.icon = pystray.Icon(
             "BaseSentinel",
-            self._image(self._running()[0]),
+            self._image(self._running()[0] or self._system_wide_installed()),
             title=self._status_text(),
             menu=menu,
         )
