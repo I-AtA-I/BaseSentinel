@@ -351,17 +351,27 @@ def start_background_worker(
             pass
 
     executable = windowless_python_executable(python_executable)
-    command = [
-        executable,
-        "-u",
-        "-m",
-        "basesentinel_agent.cli",
-        "_background-worker",
-        "--interval",
-        str(interval),
-        "--batch-size",
-        str(batch_size),
-    ]
+    if getattr(sys, "frozen", False):
+        command = [
+            executable,
+            "_background-worker",
+            "--interval",
+            str(interval),
+            "--batch-size",
+            str(batch_size),
+        ]
+    else:
+        command = [
+            executable,
+            "-u",
+            "-m",
+            "basesentinel_agent.cli",
+            "_background-worker",
+            "--interval",
+            str(interval),
+            "--batch-size",
+            str(batch_size),
+        ]
 
     with paths["log"].open("a", encoding="utf-8", buffering=1) as log_file:
         flags = 0
