@@ -394,7 +394,7 @@ def run_elevated(command: Sequence[str]) -> None:
         str(command[0]),
         parameters,
         str(windows_system_directory()),
-        1,
+        0,
     )
     result_code = result if isinstance(result, int) else getattr(result, "value", 0)
     if not result_code or result_code <= 32:
