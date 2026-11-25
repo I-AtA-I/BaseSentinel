@@ -287,6 +287,7 @@ def test_run_stops_cleanly_on_keyboard_interrupt(monkeypatch, capsys):
     monkeypatch.setattr(cli, "_client_from_config", lambda: FakeClient())
     monkeypatch.setattr(cli, "_queue", lambda: FakeQueue())
     monkeypatch.setattr(cli, "_run_cycle", lambda *args, **kwargs: (0, 0, 0, 0))
+    monkeypatch.setattr(cli, "ensure_pnp_audit_activity", lambda: "unsupported")
     monkeypatch.setattr(cli.sys, "stdin", InteractiveInput())
     monkeypatch.setattr(cli.threading, "Event", FakeStopEvent)
 
