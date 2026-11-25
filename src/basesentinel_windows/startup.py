@@ -129,7 +129,10 @@ def _run_schtasks(arguments: list[str]) -> subprocess.CompletedProcess[str]:
             capture_output=True,
             text=True,
             check=False,
+            timeout=5,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("Windows Task Scheduler did not respond within 5 seconds.") from exc
     except OSError as exc:
         raise RuntimeError(f"Could not run Windows Task Scheduler command: {exc}") from exc
 
@@ -195,7 +198,10 @@ def task_exists(task_name: str) -> bool:
             capture_output=True,
             text=True,
             check=False,
+            timeout=5,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("Windows Task Scheduler did not respond within 5 seconds.") from exc
     except OSError as exc:
         raise RuntimeError(f"Could not query Windows Task Scheduler: {exc}") from exc
     return result.returncode == 0
@@ -409,7 +415,7 @@ def is_system_boot_task(task_name: str) -> bool:
         if xml_text.startswith("<?xml") and "?>" in xml_text:
             xml_text = xml_text.split("?>", 1)[1]
         root = ET.fromstring(xml_text)
-    except (RuntimeError, ET.ParseError):
+    except (RuntimeError, ET.ParseError, OSError):
         return False
 
     principal = root.find(f".//{_tag('Principal')}")
