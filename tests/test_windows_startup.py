@@ -239,3 +239,26 @@ def test_system_boot_task_detection_rejects_non_service_logon_type(monkeypatch):
     )
 
     assert startup.is_system_boot_task("BaseSentinel Agent") is False
+
+
+
+@pytest.mark.parametrize(("state", "expected"), [("4", True), ("3", False)])
+def test_system_task_running_state_uses_task_scheduler_api(
+    monkeypatch, tmp_path, state, expected
+):
+    monkeypatch.setattr(startup, "_require_windows", lambda: None)
+    monkeypatch.setattr(startup, "windows_system_directory", lambda: tmp_path)
+    captured = {}
+
+    def fake_run(arguments, **kwargs):
+        captured["arguments"] = arguments
+        return subprocess.CompletedProcess(arguments, 0, stdout=state, stderr="")
+
+    monkeypatch.setattr(startup.subprocess, "run", fake_run)
+
+    assert startup.is_task_running("BaseSentinel Agent") is expected
+    assert captured["arguments"][0].endswith(
+        str(tmp_path / "WindowsPowerShell" / "v1.0" / "powershell.exe")
+    )
+    assert captured["arguments"][-2] == "-Command"
+    assert "GetFolder('\\\\')" in captured["arguments"][-1]
