@@ -220,7 +220,9 @@ def test_restore_user_worker_skips_when_system_task_exists(monkeypatch, capsys):
 def test_restore_user_worker_starts_previous_collector_when_system_task_is_absent(
     monkeypatch,
     capsys,
+    tmp_path,
 ):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     monkeypatch.setattr(cli, "is_system_boot_task", lambda _name: False)
     monkeypatch.setattr(
         cli.AgentConfigStore,
