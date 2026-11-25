@@ -451,25 +451,64 @@ def run_elevated(command: Sequence[str]) -> None:
 
 
 def is_system_boot_task(task_name: str) -> bool:
-    """Return whether a registered task runs as SYSTEM from a boot trigger."""
+    """Return whether a registered task runs as SYSTEM from a boot trigger.
+
+    Query Task Scheduler through its COM API instead of parsing schtasks XML.
+    The XML command can be affected by console encoding and is not needed here.
+    """
     _require_windows()
-    try:
-        result = _run_schtasks(["/Query", "/TN", task_name, "/XML"])
-        xml_text = result.stdout.lstrip("\ufeff")
-        if xml_text.startswith("<?xml") and "?>" in xml_text:
-            xml_text = xml_text.split("?>", 1)[1]
-        root = ET.fromstring(xml_text)
-    except (RuntimeError, ET.ParseError, OSError):
+    if not task_exists(task_name):
         return False
 
-    principal = root.find(f".//{_tag('Principal')}")
-    if principal is None:
+    task_name_literal = task_name.replace("'", "''")
+    script = (
+        "$service = New-Object -ComObject Schedule.Service; "
+        "$service.Connect(); "
+        f"$task = $service.GetFolder('\\').GetTask('{task_name_literal}'); "
+        "$definition = $task.Definition; "
+        "$principal = $definition.Principal; "
+        "$userId = [string]$principal.UserId; "
+        "$isSystem = $userId -eq 'S-1-5-18' -or "
+        "$userId -ieq 'SYSTEM' -or $userId -ieq 'NT AUTHORITY\\SYSTEM'; "
+        "$isServiceAccount = [int]$principal.LogonType -eq 5; "
+        "$hasBootTrigger = @($definition.Triggers | "
+        "Where-Object { [int]$_.Type -eq 8 }).Count -gt 0; "
+        "if ($isSystem -and $isServiceAccount -and $hasBootTrigger) "
+        "{ 'true' } else { 'false' }"
+    )
+    powershell = windows_system_directory() / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    try:
+        result = subprocess.run(
+            [
+                str(powershell),
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                script,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("Windows Task Scheduler identity check timed out.") from exc
+    except OSError as exc:
+        raise RuntimeError(f"Could not inspect the Task Scheduler task: {exc}") from exc
+
+    if result.returncode != 0:
+        details = (result.stderr or result.stdout).strip()[-500:]
+        raise RuntimeError(
+            "Could not inspect the Task Scheduler task."
+            + (f" Details: {details}" if details else "")
+        )
+
+    value = result.stdout.strip().lower()
+    if value == "true":
+        return True
+    if value == "false":
         return False
-    user_id = principal.findtext(_tag("UserId"))
-    logon_type = principal.findtext(_tag("LogonType"))
-    has_boot_trigger = root.find(f".//{_tag('BootTrigger')}") is not None
-    return (
-        user_id == "S-1-5-18"
-        and logon_type in (None, "ServiceAccount")
-        and has_boot_trigger
+    raise RuntimeError(
+        "Task Scheduler returned an invalid system-task identity response: "
+        + repr(result.stdout.strip()[-200:])
     )
