@@ -109,6 +109,7 @@ def test_scheduled_agent_start_logs_launch_errors_without_console_output(
 def test_unprivileged_startup_install_requests_visible_uac_approval(
     monkeypatch,
     tmp_path,
+    capsys,
 ):
     from basesentinel_agent import system_install
 
