@@ -27,6 +27,7 @@ from basesentinel_windows.startup import (
     register_logon_task,
     remove_task,
     run_elevated,
+    run_task,
     task_exists,
 )
 from basesentinel_agent.client import AgentApiError, BaseSentinelClient
@@ -443,6 +444,40 @@ def stop_background(args) -> int:
         print("BaseSentinel background agent stopped.")
     else:
         print("No BaseSentinel background agent is currently running.")
+    return 0
+
+
+def start_system_agent(args) -> int:
+    """Start an installed system-wide collector, requesting elevation if needed."""
+    try:
+        if not is_system_boot_task(_STARTUP_TASK_NAME):
+            print("BaseSentinel system-wide collector is not installed.")
+            return 1
+        if not is_admin():
+            run_elevated(_cli_command("startup-start-admin"))
+            print("The elevated start tool was launched. Approve the Windows UAC prompt to start the collector.")
+            return 0
+        run_task(_STARTUP_TASK_NAME)
+    except (RuntimeError, OSError, ValueError) as exc:
+        print(f"Could not start the system-wide BaseSentinel collector: {exc}")
+        return 1
+    print("BaseSentinel system-wide collector start was requested.")
+    return 0
+
+
+def _start_system_agent_admin() -> int:
+    if not is_admin():
+        print("Starting the system-wide agent requires Administrator privileges.")
+        return 1
+    try:
+        if not task_exists(_STARTUP_TASK_NAME):
+            print("BaseSentinel automatic startup is not installed.")
+            return 1
+        run_task(_STARTUP_TASK_NAME)
+    except RuntimeError as exc:
+        print(f"Could not start the system-wide BaseSentinel collector: {exc}")
+        return 1
+    print("BaseSentinel system-wide collector start was requested.")
     return 0
 
 
@@ -869,6 +904,20 @@ def build_parser() -> argparse.ArgumentParser:
         help=argparse.SUPPRESS,
     )
     startup_remove_admin_parser.set_defaults(handler=remove_startup_admin)
+
+    startup_start_parser = commands.add_parser(
+        "startup-start",
+        help="Start an installed system-wide collector (Administrator approval required).",
+    )
+    startup_start_parser.set_defaults(handler=start_system_agent)
+
+    startup_start_admin_parser = commands.add_parser(
+        "startup-start-admin",
+        help=argparse.SUPPRESS,
+    )
+    startup_start_admin_parser.set_defaults(
+        handler=lambda args: _start_system_agent_admin()
+    )
 
     startup_stop_admin_parser = commands.add_parser(
         "startup-stop-admin",
