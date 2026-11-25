@@ -76,10 +76,11 @@ $Iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
 if ($Iscc) {
     $IsccPath = $Iscc.Source
 } else {
-    $Candidate = Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe"
-    if (Test-Path $Candidate) {
-        $IsccPath = $Candidate
-    }
+    $Candidates = @(
+        (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe"),
+        (Join-Path ([Environment]::GetFolderPath("ProgramFilesX86")) "Inno Setup 6\ISCC.exe")
+    )
+    $IsccPath = $Candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 }
 if (-not $IsccPath) {
     throw "Inno Setup 6 was not found. Install Inno Setup 6 and run this script again."
