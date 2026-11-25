@@ -207,6 +207,50 @@ def task_exists(task_name: str) -> bool:
     return result.returncode == 0
 
 
+def is_task_running(task_name: str) -> bool:
+    """Return whether a registered Task Scheduler task is currently running."""
+    _require_windows()
+    task_name_literal = task_name.replace("'", "''")
+    script = (
+        "$service = New-Object -ComObject Schedule.Service; "
+        "$service.Connect(); "
+        f"$task = $service.GetFolder('\\\\').GetTask('{task_name_literal}'); "
+        "[int]$task.State"
+    )
+    powershell = windows_system_directory() / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    try:
+        result = subprocess.run(
+            [
+                str(powershell),
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                script,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("Windows Task Scheduler status check timed out.") from exc
+    except OSError as exc:
+        raise RuntimeError(f"Could not query Task Scheduler task state: {exc}") from exc
+
+    if result.returncode != 0:
+        details = (result.stderr or result.stdout).strip()[-500:]
+        raise RuntimeError(
+            "Could not query Task Scheduler task state."
+            + (f" Details: {details}" if details else "")
+        )
+    try:
+        state = int(result.stdout.strip())
+    except ValueError as exc:
+        raise RuntimeError("Task Scheduler returned an invalid task state.") from exc
+    # TASK_STATE_RUNNING is 4 in the Windows Task Scheduler API.
+    return state == 4
+
+
 def remove_task(task_name: str) -> bool:
     """Remove a registered task, returning false when it does not exist."""
     _require_windows()
