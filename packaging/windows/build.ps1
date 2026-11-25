@@ -17,10 +17,6 @@ if ($env:OS -ne "Windows_NT") {
 }
 
 $Python = (Get-Command python -ErrorAction Stop).Source
-$PyInstaller = Join-Path (Split-Path $Python) "Scripts\pyinstaller.exe"
-if (-not (Test-Path $PyInstaller)) {
-    $PyInstaller = "pyinstaller"
-}
 
 & $Python -m pip install --upgrade pip
 if ($LASTEXITCODE -ne 0) { throw "Could not upgrade pip." }
@@ -62,7 +58,7 @@ function Invoke-PyInstaller {
     $Arguments += $ExtraArguments
     $Arguments += $EntryPoint
 
-    & $PyInstaller @Arguments
+    & $Python -m PyInstaller @Arguments
     if ($LASTEXITCODE -ne 0) {
         throw "PyInstaller failed while building $Name."
     }
