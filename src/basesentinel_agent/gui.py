@@ -1399,6 +1399,7 @@ class AgentWindow:
         self.status_detail.set(
             "Requesting Administrator approval…" if action == "install"
             else "Starting background worker…" if action == "start"
+            else "Restoring the previous per-user collector…" if action == "restore"
             else "Requesting graceful shutdown…"
         )
         self._update_actions()
@@ -1597,6 +1598,11 @@ class AgentWindow:
                 self.control_busy = False
                 if action == "start" and code == 0:
                     self._append_activity("Agent started successfully.", "success")
+                elif action == "restore" and code == 0:
+                    self._append_activity(
+                        "The previous per-user collector is running again.",
+                        "success",
+                    )
                 elif action == "install" and code == 0:
                     result_file = None
                     for line in output.splitlines():
@@ -1656,6 +1662,16 @@ class AgentWindow:
                 else:
                     details = output or "The elevated installer returned a failure code without details."
                     self.status_detail.set("System-wide collector installation failed")
+                    self._run_control(
+                        "restore",
+                        [
+                            "startup-restore-user-worker",
+                            "--batch-size",
+                            self.batch_size.get(),
+                            "--interval",
+                            self.interval.get(),
+                        ],
+                    )
                     messagebox.showerror(
                         "System-wide installation failed",
                         details[-5000:],
