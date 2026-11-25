@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import sys
-
 from basesentinel_agent import background, cli, system_install
 
 
