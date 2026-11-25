@@ -222,3 +222,52 @@ def test_runtime_acl_reset_skips_empty_directory(monkeypatch, tmp_path):
 
     assert len(commands) == 1
     assert "/T" not in commands[0]
+
+
+def test_runtime_rename_retries_sharing_violation_until_worker_releases_handle(
+    monkeypatch,
+    tmp_path,
+):
+    source = tmp_path / "Runtime"
+    destination = tmp_path / ".Runtime-backup"
+    source.mkdir()
+    attempts = []
+
+    def fake_rename(path, target):
+        attempts.append((path, target))
+        if len(attempts) < 3:
+            raise PermissionError(13, "The process cannot access the file")
+        Path.rename_original(path, target)
+
+    monkeypatch.setattr(Path, "rename_original", Path.rename, raising=False)
+    monkeypatch.setattr(Path, "rename", fake_rename)
+    monkeypatch.setattr(system_install.time, "sleep", lambda _seconds: None)
+
+    system_install._rename_runtime_when_released(source, destination)
+
+    assert len(attempts) == 3
+    assert destination.is_dir()
+    assert not source.exists()
+
+
+def test_runtime_rename_aborts_without_touching_runtime_when_lock_persists(
+    monkeypatch,
+    tmp_path,
+):
+    source = tmp_path / "Runtime"
+    destination = tmp_path / ".Runtime-backup"
+    source.mkdir()
+
+    def locked_rename(_path, _target):
+        raise PermissionError(13, "The process cannot access the file")
+
+    clock = iter((0.0, 16.0))
+    monkeypatch.setattr(Path, "rename", locked_rename)
+    monkeypatch.setattr(system_install.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(system_install.time, "sleep", lambda _seconds: None)
+
+    with pytest.raises(RuntimeError, match="Runtime is still in use"):
+        system_install._rename_runtime_when_released(source, destination)
+
+    assert source.is_dir()
+    assert not destination.exists()
