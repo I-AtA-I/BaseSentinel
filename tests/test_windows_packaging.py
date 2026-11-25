@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import queue
+import subprocess
+
 from basesentinel_agent import background, cli, system_install
 
 
@@ -97,3 +100,88 @@ def test_packaged_system_install_copies_worker_executable(tmp_path, monkeypatch)
 
     copied_worker = destination / "BaseSentinelAgentWorker.exe"
     assert copied_worker.read_bytes() == b"worker-placeholder"
+
+
+
+def test_gui_runtime_status_refresh_dispatches_work_to_a_background_thread(monkeypatch):
+    from basesentinel_agent import gui
+
+    calls = {}
+
+    class FakeThread:
+        def __init__(self, *, target, name, daemon):
+            calls["target"] = target
+            calls["name"] = name
+            calls["daemon"] = daemon
+
+        def start(self):
+            calls["started"] = True
+
+    app = gui.AgentWindow.__new__(gui.AgentWindow)
+    app.closing = False
+    app.runtime_check_running = False
+    monkeypatch.setattr(gui.threading, "Thread", FakeThread)
+
+    app._refresh_runtime_state()
+
+    assert app.runtime_check_running is True
+    assert calls["started"] is True
+    assert calls["name"] == "BaseSentinelRuntimeStatus"
+    assert calls["daemon"] is True
+    assert calls["target"].__self__ is app
+
+
+def test_gui_runtime_status_worker_returns_status_without_touching_tk(monkeypatch, tmp_path):
+    from basesentinel_agent import gui
+
+    class FakeQueue:
+        def __len__(self):
+            return 7
+
+    app = gui.AgentWindow.__new__(gui.AgentWindow)
+    app.messages = queue.Queue()
+    monkeypatch.setattr(gui, "is_system_boot_task", lambda _name: False)
+    monkeypatch.setattr(
+        gui,
+        "background_status",
+        lambda: {"running": True, "pid": 1234},
+    )
+    monkeypatch.setattr(gui, "default_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(gui, "EventQueue", lambda _path: FakeQueue())
+
+    app._runtime_state_worker()
+
+    kind, payload = app.messages.get_nowait()
+    assert kind == "runtime_state"
+    assert payload == {
+        "system_wide": False,
+        "running": True,
+        "pid": 1234,
+        "pending": 7,
+    }
+
+
+def test_task_scheduler_command_times_out_instead_of_waiting_forever(monkeypatch):
+    from basesentinel_windows import startup
+
+    monkeypatch.setattr(
+        startup,
+        "windows_system_executable",
+        lambda _name: "C:/Windows/System32/schtasks.exe",
+    )
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        raise subprocess.TimeoutExpired(command, timeout=5)
+
+    monkeypatch.setattr(startup.subprocess, "run", fake_run)
+
+    try:
+        startup._run_schtasks(["/Query", "/TN", "BaseSentinel Agent"])
+    except RuntimeError as exc:
+        assert "within 5 seconds" in str(exc)
+    else:
+        raise AssertionError("A Task Scheduler timeout must be reported.")
+
+    assert calls[0][1]["timeout"] == 5
