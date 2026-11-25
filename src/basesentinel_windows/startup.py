@@ -214,7 +214,7 @@ def is_task_running(task_name: str) -> bool:
     script = (
         "$service = New-Object -ComObject Schedule.Service; "
         "$service.Connect(); "
-        f"$task = $service.GetFolder('\\\\').GetTask('{task_name_literal}'); "
+        f"$task = $service.GetFolder('\\').GetTask('{task_name_literal}'); "
         "[int]$task.State"
     )
     powershell = windows_system_directory() / "WindowsPowerShell" / "v1.0" / "powershell.exe"
