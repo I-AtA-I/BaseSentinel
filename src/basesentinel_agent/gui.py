@@ -7,6 +7,7 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 import tkinter as tk
 import traceback
 from datetime import datetime
@@ -95,6 +96,7 @@ class AgentWindow:
         self.background_running = False
         self.system_wide_installed = False
         self.runtime_check_running = False
+        self.system_install_result_running = False
         self.log_offset = 0
 
         self.batch_size = tk.StringVar(value="500")
@@ -1234,18 +1236,30 @@ class AgentWindow:
         self.collect_button.configure(state="normal" if ready else "disabled")
         self.drain_button.configure(state="normal" if ready else "disabled")
         self.start_button.configure(
+            text=(
+                "System-wide collector installed"
+                if self.system_wide_installed
+                else "Install system-wide collector"
+                if getattr(sys, "frozen", False)
+                else "Start background"
+            ),
             state=(
                 "normal"
                 if self.config_loaded and idle_task and not self.background_running
                 else "disabled"
-            )
+            ),
         )
         self.stop_button.configure(
+            text=(
+                "Stop system-wide collector"
+                if self.system_wide_installed
+                else "Stop agent"
+            ),
             state=(
                 "normal"
                 if self.config_loaded and idle_task and self.background_running
                 else "disabled"
-            )
+            ),
         )
 
     def connect(self, tab_index: int) -> None:
@@ -1411,6 +1425,34 @@ class AgentWindow:
         except (OSError, subprocess.TimeoutExpired) as exc:
             self.messages.put(("control_error", (action, str(exc))))
 
+    def _watch_system_install_result(self, result_file: str) -> None:
+        """Wait for the elevated helper to write its final result without blocking Tk."""
+        path = Path(result_file)
+        marker = "BASESENTINEL_INSTALL_EXIT_CODE="
+        deadline = time.monotonic() + 180
+        while not self.closing and time.monotonic() < deadline:
+            try:
+                contents = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                contents = ""
+
+            for line in reversed(contents.splitlines()):
+                if line.startswith(marker):
+                    try:
+                        exit_code = int(line.partition("=")[2].strip())
+                    except ValueError:
+                        break
+                    output = contents.split(marker, 1)[0].strip()
+                    self.messages.put((
+                        "install_result",
+                        (str(path), exit_code, output),
+                    ))
+                    return
+            time.sleep(0.5)
+
+        if not self.closing:
+            self.messages.put(("install_result_timeout", str(path)))
+
     def start_background(self) -> None:
         if not self.config_loaded:
             messagebox.showinfo("Enrollment required", "Connect this device before starting collection.")
@@ -1552,14 +1594,34 @@ class AgentWindow:
                 if action == "start" and code == 0:
                     self._append_activity("Agent started successfully.", "success")
                 elif action == "install" and code == 0:
-                    self._append_activity(
-                        "System-wide collector setup was launched. Approve the Windows UAC prompt if requested.",
-                        "success",
-                    )
+                    result_file = None
                     for line in output.splitlines():
-                        self._append_activity(line, "info")
+                        if line.startswith("BASESENTINEL_INSTALL_RESULT_FILE="):
+                            result_file = line.partition("=")[2].strip()
+                        elif line.strip():
+                            self._append_activity(line, "info")
                     if error:
                         self._append_activity(error, "error")
+                    if result_file:
+                        self.system_install_result_running = True
+                        self.status_detail.set(
+                            "Waiting for Administrator approval and installation result…"
+                        )
+                        self._append_activity(
+                            "Elevated installer launched; waiting for its final result.",
+                            "info",
+                        )
+                        threading.Thread(
+                            target=self._watch_system_install_result,
+                            args=(result_file,),
+                            name="BaseSentinelSystemInstallResult",
+                            daemon=True,
+                        ).start()
+                    else:
+                        self._append_activity(
+                            "Installer launch was requested, but no result-log path was returned.",
+                            "error",
+                        )
                 else:
                     if output:
                         for line in output.splitlines():
@@ -1573,6 +1635,45 @@ class AgentWindow:
                         "Background agent",
                         output or error or f"Command exited with code {code}.",
                     )
+                self._refresh_runtime_state()
+
+            elif kind == "install_result":
+                result_file, code, output = payload
+                self.system_install_result_running = False
+                for line in output.splitlines():
+                    if line.strip():
+                        self._append_activity(line, "success" if code == 0 else "error")
+                if code == 0:
+                    self._append_activity(
+                        "System-wide collector installation completed.",
+                        "success",
+                    )
+                    self.status_detail.set("System-wide collector installed; verifying Task Scheduler state…")
+                else:
+                    details = output or "The elevated installer returned a failure code without details."
+                    self.status_detail.set("System-wide collector installation failed")
+                    messagebox.showerror(
+                        "System-wide installation failed",
+                        details[-5000:],
+                    )
+                try:
+                    Path(result_file).unlink()
+                except OSError:
+                    pass
+                self._refresh_runtime_state()
+
+            elif kind == "install_result_timeout":
+                self.system_install_result_running = False
+                self.status_detail.set("The elevated installer did not report completion")
+                self._append_activity(
+                    f"Installer result timed out. Diagnostic log: {payload}",
+                    "error",
+                )
+                messagebox.showerror(
+                    "System-wide installation",
+                    "The elevated installer did not report a final result. "
+                    f"Its diagnostic log was left at:\\n{payload}",
+                )
                 self._refresh_runtime_state()
 
             elif kind == "control_error":
