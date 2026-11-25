@@ -203,6 +203,25 @@ def console_python_executable(executable: str | None = None) -> str:
     return selected
 
 
+def agent_cli_command(*arguments: str) -> list[str]:
+    """Build a CLI command that works in source and frozen Windows installs."""
+    if getattr(sys, "frozen", False):
+        executable = Path(sys.executable).with_name("BaseSentinelAgent.exe")
+        if not executable.is_file():
+            raise RuntimeError(
+                "The BaseSentinel CLI executable is missing. Repair or reinstall the application."
+            )
+        return [str(executable), *arguments]
+
+    return [
+        console_python_executable(),
+        "-u",
+        "-m",
+        "basesentinel_agent.cli",
+        *arguments,
+    ]
+
+
 def windowless_python_executable(executable: str | None = None) -> str:
     """Return the active environment's windowed interpreter for detached workers."""
     selected = executable or sys.executable
