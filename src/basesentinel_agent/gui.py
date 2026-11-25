@@ -19,7 +19,7 @@ from basesentinel_agent.background import (
     agent_log_path,
     background_status,
 )
-from basesentinel_windows.startup import is_system_boot_task
+from basesentinel_windows.startup import is_system_boot_task, is_task_running
 from basesentinel_agent.client import AgentApiError, BaseSentinelClient
 from basesentinel_agent.queue import EventQueue
 from basesentinel_agent.storage import AgentConfigStore, default_data_dir
@@ -1130,7 +1130,10 @@ class AgentWindow:
         try:
             system_wide = is_system_boot_task(_SYSTEM_STARTUP_TASK_NAME)
             if system_wide:
-                payload = {"system_wide": True}
+                payload = {
+                    "system_wide": True,
+                    "system_wide_running": is_task_running(_SYSTEM_STARTUP_TASK_NAME),
+                }
             else:
                 state = background_status()
                 pending = len(EventQueue(default_data_dir() / "events.sqlite3"))
@@ -1164,22 +1167,36 @@ class AgentWindow:
 
         self.system_wide_installed = bool(payload["system_wide"])
         if self.system_wide_installed:
-            self.background_running = True
+            self.background_running = bool(payload["system_wide_running"])
             self.pid_value.set("SYSTEM")
             self.queue_value.set("Protected")
-            self.status_text.set("System-wide")
+            self.status_text.set(
+                "System-wide · Running" if self.background_running else "System-wide · Stopped"
+            )
             self.status_detail.set(
-                "System collector installed to run as SYSTEM at Windows boot"
+                "Installed and running as SYSTEM"
+                if self.background_running
+                else "Installed, but stopped. Start the system-wide collector to resume monitoring."
             )
             self.header_status.configure(
-                text="●  SYSTEM COLLECTOR INSTALLED",
-                bg="#15352f",
-                fg=COLORS["success"],
+                text=(
+                    "●  SYSTEM COLLECTOR RUNNING"
+                    if self.background_running
+                    else "●  SYSTEM COLLECTOR STOPPED"
+                ),
+                bg="#15352f" if self.background_running else "#2b2630",
+                fg=COLORS["success"] if self.background_running else COLORS["muted"],
             )
-            self.sidebar_status_dot.configure(fg=COLORS["success"])
+            self.sidebar_status_dot.configure(
+                fg=COLORS["success"] if self.background_running else COLORS["muted"]
+            )
             self.sidebar_status_label.configure(
-                text="System-wide collector installed",
-                fg=COLORS["success"],
+                text=(
+                    "System-wide collector running"
+                    if self.background_running
+                    else "System-wide collector installed · stopped"
+                ),
+                fg=COLORS["success"] if self.background_running else COLORS["muted"],
             )
             self._update_actions()
             return
@@ -1225,23 +1242,47 @@ class AgentWindow:
         self.connect_button.configure(
             state=(
                 "normal"
-                if not self.enrolling and idle_task and not self.background_running
+                if (
+                    not self.enrolling
+                    and idle_task
+                    and not self.background_running
+                    and not self.system_wide_installed
+                )
                 else "disabled"
             )
         )
-        ready = self.config_loaded and idle_task and not self.background_running
+        ready = (
+            self.config_loaded
+            and idle_task
+            and not self.background_running
+            and not self.system_wide_installed
+        )
         self.batch_size_select.configure(
-            state="readonly" if not self.background_running and not self.control_busy else "disabled"
+            state=(
+                "readonly"
+                if not self.background_running
+                and not self.system_wide_installed
+                and not self.control_busy
+                else "disabled"
+            )
         )
         self.interval_entry.configure(
-            state="normal" if not self.background_running and not self.control_busy else "disabled"
+            state=(
+                "normal"
+                if not self.background_running
+                and not self.system_wide_installed
+                and not self.control_busy
+                else "disabled"
+            )
         )
         self.diagnostics_button.configure(state="normal" if ready else "disabled")
         self.collect_button.configure(state="normal" if ready else "disabled")
         self.drain_button.configure(state="normal" if ready else "disabled")
         self.start_button.configure(
             text=(
-                "System-wide collector installed"
+                "System-wide collector running"
+                if self.system_wide_installed and self.background_running
+                else "Start system-wide collector"
                 if self.system_wide_installed
                 else "Install system-wide collector"
                 if getattr(sys, "frozen", False)
@@ -1477,7 +1518,9 @@ class AgentWindow:
             f"Starting windowless background agent (batch {batch}, interval {interval}s)…",
             "info",
         )
-        if getattr(sys, "frozen", False):
+        if getattr(sys, "frozen", False) and self.system_wide_installed:
+            self._run_control("system-start", ["startup-start"])
+        elif getattr(sys, "frozen", False):
             self._run_control(
                 "install",
                 [
@@ -1598,6 +1641,11 @@ class AgentWindow:
                 self.control_busy = False
                 if action == "start" and code == 0:
                     self._append_activity("Agent started successfully.", "success")
+                elif action == "system-start" and code == 0:
+                    self._append_activity(
+                        "System-wide collector start was requested.",
+                        "success",
+                    )
                 elif action == "restore" and code == 0:
                     self._append_activity(
                         "The previous per-user collector is running again.",
