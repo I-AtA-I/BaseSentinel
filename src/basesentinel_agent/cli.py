@@ -681,6 +681,32 @@ def remove_startup_admin(args) -> int:
         print("BaseSentinel automatic startup was not installed.")
     return 0
 
+def restore_user_worker(args) -> int:
+    """Restore the previous per-user collector only when no SYSTEM task was registered."""
+    try:
+        if is_system_boot_task(_STARTUP_TASK_NAME):
+            print(
+                "A system-wide collector is registered; the per-user worker was not restarted."
+            )
+            return 0
+
+        AgentConfigStore(machine_scope=False).load()
+        state = background_status()
+        if state["running"]:
+            print("The previous per-user collector is already running.")
+            return 0
+
+        pid = start_background_worker(
+            batch_size=args.batch_size,
+            interval=args.interval,
+        )
+        print(f"The previous per-user collector was restored (PID {pid}).")
+        return 0
+    except (RuntimeError, ValueError, OSError) as exc:
+        print(f"Could not restore the previous per-user collector: {exc}")
+        return 1
+
+
 def startup_status(args) -> int:
     try:
         installed = task_exists(_STARTUP_TASK_NAME)
@@ -879,6 +905,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show whether system-wide automatic startup is installed.",
     )
     startup_status_parser.set_defaults(handler=startup_status)
+
+    restore_user_parser = commands.add_parser(
+        "startup-restore-user-worker",
+        help=argparse.SUPPRESS,
+    )
+    restore_user_parser.add_argument("--interval", type=_positive_interval, default=60.0)
+    restore_user_parser.add_argument("--batch-size", type=_batch_size, default=500)
+    restore_user_parser.set_defaults(handler=restore_user_worker)
 
     worker_parser = commands.add_parser(
         "_background-worker",
