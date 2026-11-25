@@ -155,14 +155,13 @@ def seeded_dashboard(app, users):
         ))
 
         # One event outside the one-hour period.
-        outside_period_event = ingest(
+        events.append(ingest(
             agent_two,
             timestamp_at(base, -120),
             "system",
             "security.critical",
             10,
-        )
-        events.append(outside_period_event)
+        ))
 
         # One future event. It must not be included in analytics.
         events.append(ingest(
@@ -181,16 +180,7 @@ def seeded_dashboard(app, users):
         acknowledged_alert.acknowledged_by_user_id = users["analyst"]
         acknowledged_alert.acknowledged_at = utcnow_naive()
 
-        # Keep one open alert outside the selected analytics period.
-        open_alert = Alert.query.filter_by(
-            source_event_id=outside_period_event.id,
-            status="open",
-        ).one()
-        old_alert_time = (base - timedelta(days=2)).replace(tzinfo=None)
-        open_alert.first_seen_at = old_alert_time
-        open_alert.last_seen_at = old_alert_time
-        open_alert.created_at = old_alert_time
-
+        # Alert inventory is independent of the selected event analytics period.
         db.session.commit()
 
         return {
@@ -263,8 +253,8 @@ def test_dashboard_returns_correct_aggregations(
         10: 1,
     }
 
-    # Only two recent events created alerts.
-    assert data["alerts"]["total"] == 2
+    # Alert inventory includes alerts from recent, old, and future events.
+    assert data["alerts"]["total"] == 4
 
     statuses = {
         item["status"]: item["count"]
@@ -273,7 +263,7 @@ def test_dashboard_returns_correct_aggregations(
 
     assert statuses == {
         "acknowledged": 1,
-        "open": 1,
+        "open": 3,
     }
 
     alert_severities = {
@@ -283,7 +273,7 @@ def test_dashboard_returns_correct_aggregations(
 
     assert alert_severities == {
         9: 1,
-        10: 1,
+        10: 3,
     }
 
     assert data["agents"]["total"] == 2
