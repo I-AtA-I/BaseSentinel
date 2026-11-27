@@ -257,8 +257,6 @@ class AgentWindow:
         )
         subtitle.pack(side="left")
 
-        self.maximize_button = self._title_bar_button(bar, "□", self._toggle_maximize)
-        self._title_bar_button(bar, "—", self.root.iconify)
         self._title_bar_button(
             bar,
             "×",
@@ -266,7 +264,10 @@ class AgentWindow:
             hover_background=COLORS["danger"],
             hover_foreground="#ffffff",
         )
-        self.maximize_button.pack(side="right", fill="y")
+        self.maximize_button = self._title_bar_button(
+            bar, "□", self._toggle_maximize
+        )
+        self._title_bar_button(bar, "—", self.root.iconify)
 
         for widget in (bar, brand, title, subtitle):
             widget.bind("<ButtonPress-1>", self._start_window_drag)
