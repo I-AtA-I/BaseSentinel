@@ -213,25 +213,9 @@ class AgentWindow:
             _write_endpoint_diagnostic(f"Could not apply custom Windows title bar: {exc}")
 
     def _start_window_drag(self, event) -> None:
-        if os.name == "nt" and self._window_handle:
-            user32 = ctypes.WinDLL("user32", use_last_error=True)
-            release_capture = user32.ReleaseCapture
-            release_capture.restype = ctypes.c_int
-            send_message = user32.SendMessageW
-            send_message.argtypes = [
-                ctypes.c_void_p,
-                ctypes.c_uint,
-                ctypes.c_void_p,
-                ctypes.c_void_p,
-            ]
-            send_message.restype = ctypes.c_ssize_t
-            release_capture()
-            send_message(
-                self._window_handle,
-                0x00A1,
-                ctypes.c_void_p(2),
-                ctypes.c_void_p(0),
-            )
+        # Keep dragging inside Tk's event loop. A synchronous WM_NCLBUTTONDOWN
+        # SendMessage call can block the GUI callback while Windows tracks the drag.
+        if self.root.state() == "zoomed":
             return
         self._drag_position = (
             event.x_root - self.root.winfo_x(),
