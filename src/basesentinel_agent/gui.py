@@ -209,7 +209,7 @@ class AgentWindow:
                 0,
                 0x0001 | 0x0002 | 0x0004 | 0x0020,
             )
-        except (AttributeError, OSError, tk.TclError) as exc:
+        except Exception as exc:
             _write_endpoint_diagnostic(f"Could not apply custom Windows title bar: {exc}")
 
     def _start_window_drag(self, event) -> None:
@@ -237,6 +237,9 @@ class AgentWindow:
             event.x_root - self.root.winfo_x(),
             event.y_root - self.root.winfo_y(),
         )
+
+    def _stop_window_drag(self, _event) -> None:
+        self._drag_position = None
 
     def _move_window(self, event) -> None:
         if self._drag_position is None:
@@ -305,6 +308,7 @@ class AgentWindow:
         for widget in (bar, brand, title, subtitle):
             widget.bind("<ButtonPress-1>", self._start_window_drag)
             widget.bind("<B1-Motion>", self._move_window)
+            widget.bind("<ButtonRelease-1>", self._stop_window_drag)
             widget.bind("<Double-Button-1>", lambda _event: self._toggle_maximize())
 
     def _title_bar_button(
