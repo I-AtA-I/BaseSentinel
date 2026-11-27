@@ -1,19 +1,19 @@
 <aside class="sidebar">
-    <a class="brand" href="/">
+    <a class="brand" href="/app/">
         <span class="brand-mark">B</span>
         <span><strong>BASESENTINEL</strong><small>LOCAL SECURITY SYSTEM</small></span>
     </a>
     <div class="sidebar-section">
         <span class="sidebar-label">OPERATIONS</span>
-        <a class="nav-link {{ 'active' if request.path == '/' else '' }}" href="/"><span class="nav-icon">◈</span> Overview</a>
-        <a class="nav-link {{ 'active' if request.path.startswith('/events') else '' }}" href="/events"><span class="nav-icon">⌁</span> Events</a>
-        <a class="nav-link {{ 'active' if request.path.startswith('/activities') else '' }}" href="/activities"><span class="nav-icon">◎</span> Correlated activity</a>
-        <a class="nav-link {{ 'active' if request.path.startswith('/alerts') else '' }}" href="/alerts"><span class="nav-icon">△</span> Alerts</a>
-        <a class="nav-link {{ 'active' if request.path.startswith('/reports') else '' }}" href="/reports"><span class="nav-icon">▧</span> Reports</a>
-        <a class="nav-link {{ 'active' if request.path.startswith('/agent-health') else '' }}" href="/agent-health"><span class="nav-icon">◉</span> Agent health</a>
-        <a class="nav-link {{ 'active' if request.path.startswith('/detection-rules') else '' }}" href="/detection-rules"><span class="nav-icon">⚑</span> Detection rules</a>
-        <a class="nav-link {{ 'active' if request.path.startswith('/agents') else '' }}" href="/agents"><span class="nav-icon">▦</span> Clients</a>
-        <a class="nav-link {{ 'active' if request.path.startswith('/settings/enrollment') else '' }}" href="/settings/enrollment"><span class="nav-icon">⚙</span> Agent enrollment</a>
+        <a class="nav-link {{ 'active' if request.path == '/app/' else '' }}" href="/app/"><span class="nav-icon">◈</span> Overview</a>
+        <a class="nav-link {{ 'active' if request.path.startswith('/app/events') else '' }}" href="/app/events"><span class="nav-icon">⌁</span> Events</a>
+        <a class="nav-link {{ 'active' if request.path.startswith('/app/activities') else '' }}" href="/app/activities"><span class="nav-icon">◎</span> Correlated activity</a>
+        <a class="nav-link {{ 'active' if request.path.startswith('/app/alerts') else '' }}" href="/app/alerts"><span class="nav-icon">△</span> Alerts</a>
+        <a class="nav-link {{ 'active' if request.path.startswith('/app/reports') else '' }}" href="/app/reports"><span class="nav-icon">▧</span> Reports</a>
+        <a class="nav-link {{ 'active' if request.path.startswith('/app/agent-health') else '' }}" href="/app/agent-health"><span class="nav-icon">◉</span> Agent health</a>
+        <a class="nav-link {{ 'active' if request.path.startswith('/app/detection-rules') else '' }}" href="/app/detection-rules"><span class="nav-icon">⚑</span> Detection rules</a>
+        <a class="nav-link {{ 'active' if request.path.startswith('/app/agents') else '' }}" href="/app/agents"><span class="nav-icon">▦</span> Clients</a>
+        <a class="nav-link {{ 'active' if request.path.startswith('/app/settings/enrollment') else '' }}" href="/app/settings/enrollment"><span class="nav-icon">⚙</span> Agent enrollment</a>
     </div>
     <div class="sidebar-bottom">
         <div class="connection-indicator"><span class="status-dot"></span><span>Local instance / connected</span></div>
