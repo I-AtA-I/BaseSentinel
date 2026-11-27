@@ -55,6 +55,25 @@ def _write_endpoint_diagnostic(message: str) -> None:
         pass
 
 
+def _set_windows_app_user_model_id() -> None:
+    if os.name != "nt":
+        return
+    try:
+        shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+        set_app_id = shell32.SetCurrentProcessExplicitAppUserModelID
+        set_app_id.argtypes = [ctypes.c_wchar_p]
+        set_app_id.restype = ctypes.c_long
+        result = set_app_id("BaseSentinel.Endpoint")
+        if result < 0:
+            _write_endpoint_diagnostic(
+                f"Could not set the Windows application ID (HRESULT: 0x{result & 0xFFFFFFFF:08X})."
+            )
+    except (AttributeError, OSError, TypeError, ValueError) as exc:
+        _write_endpoint_diagnostic(
+            f"Could not set the Windows application ID: {exc}"
+        )
+
+
 def _report_tk_callback_exception(exc_type, exc_value, exc_traceback) -> None:
     details = "".join(
         traceback.format_exception(exc_type, exc_value, exc_traceback)
@@ -163,6 +182,108 @@ class AgentWindow:
         self.logo_icon = self._load_logo(32)
         if self.logo_icon is not None:
             self.root.iconphoto(True, self.logo_icon)
+        self._windows_icon_handles: list[int] = []
+        self._set_native_windows_icon()
+
+    def _set_native_windows_icon(self) -> None:
+        if os.name != "nt":
+            return
+
+        logo_path = _asset_path("Logo.png")
+        if not logo_path.is_file():
+            _write_endpoint_diagnostic(
+                f"Could not set the Windows taskbar icon: logo not found at {logo_path}."
+            )
+            return
+
+        icon_path = _endpoint_log_path().with_name("BaseSentinel.ico")
+        try:
+            icon_path.parent.mkdir(parents=True, exist_ok=True)
+            with Image.open(logo_path) as source:
+                source.convert("RGBA").save(
+                    icon_path,
+                    format="ICO",
+                    sizes=[
+                        (16, 16),
+                        (24, 24),
+                        (32, 32),
+                        (48, 48),
+                        (64, 64),
+                        (128, 128),
+                        (256, 256),
+                    ],
+                )
+
+            user32 = ctypes.WinDLL("user32", use_last_error=True)
+            get_parent = user32.GetParent
+            get_parent.argtypes = [ctypes.c_void_p]
+            get_parent.restype = ctypes.c_void_p
+
+            load_image = user32.LoadImageW
+            load_image.argtypes = [
+                ctypes.c_void_p,
+                ctypes.c_wchar_p,
+                ctypes.c_uint,
+                ctypes.c_int,
+                ctypes.c_int,
+                ctypes.c_uint,
+            ]
+            load_image.restype = ctypes.c_void_p
+
+            send_message = user32.SendMessageW
+            send_message.argtypes = [
+                ctypes.c_void_p,
+                ctypes.c_uint,
+                ctypes.c_size_t,
+                ctypes.c_ssize_t,
+            ]
+            send_message.restype = ctypes.c_ssize_t
+
+            client_handle = ctypes.c_void_p(self.root.winfo_id())
+            window_handle = get_parent(client_handle) or client_handle.value
+            if not window_handle:
+                raise OSError("Could not retrieve the native window handle.")
+
+            # WM_SETICON selects the icon used by the title bar and taskbar.
+            for icon_kind, size in ((1, 32), (0, 16)):
+                icon_handle = load_image(
+                    None,
+                    str(icon_path),
+                    1,  # IMAGE_ICON
+                    size,
+                    size,
+                    0x0010,  # LR_LOADFROMFILE
+                )
+                if not icon_handle:
+                    raise ctypes.WinError(ctypes.get_last_error())
+                send_message(
+                    ctypes.c_void_p(window_handle),
+                    0x0080,  # WM_SETICON
+                    icon_kind,
+                    int(icon_handle),
+                )
+                self._windows_icon_handles.append(int(icon_handle))
+        except (OSError, ValueError, TypeError, AttributeError, tk.TclError) as exc:
+            _write_endpoint_diagnostic(
+                f"Could not set the native Windows taskbar icon: {exc}"
+            )
+
+    def _release_native_windows_icons(self) -> None:
+        if os.name != "nt":
+            return
+        try:
+            destroy_icon = ctypes.WinDLL(
+                "user32", use_last_error=True
+            ).DestroyIcon
+            destroy_icon.argtypes = [ctypes.c_void_p]
+            destroy_icon.restype = ctypes.c_int
+            for handle in self._windows_icon_handles:
+                destroy_icon(ctypes.c_void_p(handle))
+            self._windows_icon_handles.clear()
+        except (AttributeError, OSError, TypeError, ValueError) as exc:
+            _write_endpoint_diagnostic(
+                f"Could not release the native Windows icons: {exc}"
+            )
 
     def _apply_windows_chrome(self) -> None:
         if os.name != "nt":
@@ -1998,11 +2119,13 @@ class AgentWindow:
         if process is not None and process.poll() is None:
             process.terminate()
         self.root.destroy()
+        self._release_native_windows_icons()
 
 
 def main() -> None:
     root = None
     try:
+        _set_windows_app_user_model_id()
         root = tk.Tk()
         root.withdraw()
         root.report_callback_exception = _report_tk_callback_exception
