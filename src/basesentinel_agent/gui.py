@@ -135,6 +135,7 @@ class AgentWindow:
         self.system_install_result_running = False
         self.log_offset = 0
         self._last_window_size: tuple[int, int] | None = None
+        self._resize_redraw_after_id: str | None = None
 
         self.batch_size = tk.StringVar(value="500")
         self.interval = tk.StringVar(value="60")
@@ -172,10 +173,21 @@ class AgentWindow:
             return
         self._last_window_size = size
 
-        # Tk defers geometry recalculation and painting to idle callbacks.
-        # Windows can deliver resize messages continuously inside its modal
-        # sizing loop, so flush only idle work for each new top-level size.
-        # Avoid update(), which would re-enter normal event processing.
+        # Coalesce the stream of WM_SIZE notifications. Running Tk's full
+        # idle layout pass for every pixel makes interactive resizing stutter.
+        if self._resize_redraw_after_id is None:
+            try:
+                self._resize_redraw_after_id = self.root.after(
+                    33,
+                    self._flush_resize_idle_tasks,
+                )
+            except tk.TclError:
+                self._resize_redraw_after_id = None
+
+    def _flush_resize_idle_tasks(self) -> None:
+        self._resize_redraw_after_id = None
+        if self.closing:
+            return
         try:
             self.root.update_idletasks()
         except tk.TclError:
@@ -2135,6 +2147,12 @@ class AgentWindow:
 
     def close(self) -> None:
         self.closing = True
+        if self._resize_redraw_after_id is not None:
+            try:
+                self.root.after_cancel(self._resize_redraw_after_id)
+            except tk.TclError:
+                pass
+            self._resize_redraw_after_id = None
         # The detached background worker is intentionally left running when the console closes.
         process = self.process
         if process is not None and process.poll() is None:
