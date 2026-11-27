@@ -134,8 +134,6 @@ class AgentWindow:
         self.runtime_state_error = False
         self.system_install_result_running = False
         self.log_offset = 0
-        self._last_window_size: tuple[int, int] | None = None
-        self._resize_redraw_after_id: str | None = None
 
         self.batch_size = tk.StringVar(value="500")
         self.interval = tk.StringVar(value="60")
@@ -149,8 +147,6 @@ class AgentWindow:
 
         self._configure_styles()
         self._build_interface()
-        if os.name == "nt":
-            self.root.bind("<Configure>", self._on_root_configure, add="+")
         self.root.update_idletasks()
         self._apply_windows_chrome()
         self._set_window_icon()
@@ -163,35 +159,6 @@ class AgentWindow:
         self.root.after(150, self._poll_messages)
         self.root.after(1500, self._periodic_refresh)
         self.root.after(10000, self._periodic_runtime_refresh)
-
-    def _on_root_configure(self, event: tk.Event) -> None:
-        if event.widget is not self.root:
-            return
-
-        size = (event.width, event.height)
-        if size == self._last_window_size:
-            return
-        self._last_window_size = size
-
-        # Coalesce the stream of WM_SIZE notifications. Running Tk's full
-        # idle layout pass for every pixel makes interactive resizing stutter.
-        if self._resize_redraw_after_id is None:
-            try:
-                self._resize_redraw_after_id = self.root.after(
-                    33,
-                    self._flush_resize_idle_tasks,
-                )
-            except tk.TclError:
-                self._resize_redraw_after_id = None
-
-    def _flush_resize_idle_tasks(self) -> None:
-        self._resize_redraw_after_id = None
-        if self.closing:
-            return
-        try:
-            self.root.update_idletasks()
-        except tk.TclError:
-            pass
 
     def _load_logo(self, size: int):
         path = _asset_path("Logo.png")
@@ -681,7 +648,6 @@ class AgentWindow:
                 padx=20,
                 pady=16,
             )
-            page.place(relx=0, rely=0, relwidth=1, relheight=1)
             self.pages[key] = page
 
         self._build_overview_page(self.pages["overview"])
@@ -903,8 +869,14 @@ class AgentWindow:
         page = self.pages.get(section)
         if page is None:
             return
-        page.tkraise()
-        self.current_page = section
+
+        if self.current_page != section:
+            if self.current_page is not None:
+                self.pages[self.current_page].place_forget()
+            page.place(relx=0, rely=0, relwidth=1, relheight=1)
+            page.tkraise()
+            self.current_page = section
+
         self._update_navigation(section)
         if section == "queue":
             self._refresh_queue_table()
@@ -2147,12 +2119,6 @@ class AgentWindow:
 
     def close(self) -> None:
         self.closing = True
-        if self._resize_redraw_after_id is not None:
-            try:
-                self.root.after_cancel(self._resize_redraw_after_id)
-            except tk.TclError:
-                pass
-            self._resize_redraw_after_id = None
         # The detached background worker is intentionally left running when the console closes.
         process = self.process
         if process is not None and process.poll() is None:
