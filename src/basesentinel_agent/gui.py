@@ -134,6 +134,7 @@ class AgentWindow:
         self.runtime_state_error = False
         self.system_install_result_running = False
         self.log_offset = 0
+        self._last_window_size: tuple[int, int] | None = None
 
         self.batch_size = tk.StringVar(value="500")
         self.interval = tk.StringVar(value="60")
@@ -147,6 +148,8 @@ class AgentWindow:
 
         self._configure_styles()
         self._build_interface()
+        if os.name == "nt":
+            self.root.bind("<Configure>", self._on_root_configure, add="+")
         self.root.update_idletasks()
         self._apply_windows_chrome()
         self._set_window_icon()
@@ -159,6 +162,24 @@ class AgentWindow:
         self.root.after(150, self._poll_messages)
         self.root.after(1500, self._periodic_refresh)
         self.root.after(10000, self._periodic_runtime_refresh)
+
+    def _on_root_configure(self, event: tk.Event) -> None:
+        if event.widget is not self.root:
+            return
+
+        size = (event.width, event.height)
+        if size == self._last_window_size:
+            return
+        self._last_window_size = size
+
+        # Tk defers geometry recalculation and painting to idle callbacks.
+        # Windows can deliver resize messages continuously inside its modal
+        # sizing loop, so flush only idle work for each new top-level size.
+        # Avoid update(), which would re-enter normal event processing.
+        try:
+            self.root.update_idletasks()
+        except tk.TclError:
+            pass
 
     def _load_logo(self, size: int):
         path = _asset_path("Logo.png")
