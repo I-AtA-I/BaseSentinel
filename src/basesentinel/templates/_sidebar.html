@@ -5,7 +5,7 @@
     </a>
     <div class="sidebar-section">
         <span class="sidebar-label">OPERATIONS</span>
-        <a class="nav-link {{ 'active' if request.path == '/' else '' }}" href="/app/"><span class="nav-icon">◈</span> Overview</a>
+        <a class="nav-link {{ 'active' if request.path == '/app/' else '' }}" href="/app/"><span class="nav-icon">◈</span> Overview</a>
         <a class="nav-link {{ 'active' if request.path.startswith('/app/events') else '' }}" href="/app/events"><span class="nav-icon">⌁</span> Events</a>
         <a class="nav-link {{ 'active' if request.path.startswith('/app/activities') else '' }}" href="/app/activities"><span class="nav-icon">◎</span> Correlated activity</a>
         <a class="nav-link {{ 'active' if request.path.startswith('/app/alerts') else '' }}" href="/app/alerts"><span class="nav-icon">△</span> Alerts</a>
