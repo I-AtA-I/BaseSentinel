@@ -21,6 +21,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 MinVersion=10.0.19041
 WizardStyle=modern
+SetupIconFile={#AppPayloadDir}\BaseSentinel.ico
 Compression=lzma2
 SolidCompression=yes
 CloseApplications=yes
