@@ -96,6 +96,8 @@ class AgentWindow:
         self.background_running = False
         self.system_wide_installed = False
         self.runtime_check_running = False
+        self.runtime_state_checked = False
+        self.runtime_state_error = False
         self.system_install_result_running = False
         self.log_offset = 0
 
@@ -1157,7 +1159,9 @@ class AgentWindow:
         if self.closing:
             return
 
+        self.runtime_state_checked = True
         if "error" in payload:
+            self.runtime_state_error = True
             self.background_running = False
             self.pid_value.set("—")
             self.status_detail.set(f"Status check failed: {payload['error']}")
@@ -1165,6 +1169,7 @@ class AgentWindow:
             self._update_actions()
             return
 
+        self.runtime_state_error = False
         self.system_wide_installed = bool(payload["system_wide"])
         if self.system_wide_installed:
             self.background_running = bool(payload["system_wide_running"])
@@ -1251,8 +1256,10 @@ class AgentWindow:
                 else "disabled"
             )
         )
+        runtime_ready = self.runtime_state_checked and not self.runtime_state_error
         ready = (
-            self.config_loaded
+            runtime_ready
+            and self.config_loaded
             and idle_task
             and not self.background_running
             and not self.system_wide_installed
@@ -1280,7 +1287,11 @@ class AgentWindow:
         self.drain_button.configure(state="normal" if ready else "disabled")
         self.start_button.configure(
             text=(
-                "System-wide collector running"
+                "Checking collector status…"
+                if not self.runtime_state_checked
+                else "Collector status unavailable"
+                if self.runtime_state_error
+                else "System-wide collector running"
                 if self.system_wide_installed and self.background_running
                 else "Start system-wide collector"
                 if self.system_wide_installed
@@ -1290,19 +1301,29 @@ class AgentWindow:
             ),
             state=(
                 "normal"
-                if self.config_loaded and idle_task and not self.background_running
+                if runtime_ready
+                and self.config_loaded
+                and idle_task
+                and not self.background_running
                 else "disabled"
             ),
         )
         self.stop_button.configure(
             text=(
-                "Stop system-wide collector"
+                "Checking collector status…"
+                if not self.runtime_state_checked
+                else "Status unavailable"
+                if self.runtime_state_error
+                else "Stop system-wide collector"
                 if self.system_wide_installed
                 else "Stop agent"
             ),
             state=(
                 "normal"
-                if self.config_loaded and idle_task and self.background_running
+                if runtime_ready
+                and self.config_loaded
+                and idle_task
+                and self.background_running
                 else "disabled"
             ),
         )
