@@ -64,12 +64,22 @@ function Invoke-PyInstaller {
     }
 }
 
+$LogoPath = Join-Path $RepositoryRoot "assets\Logo.png"
+if (-not (Test-Path $LogoPath)) {
+    throw "BaseSentinel logo was not found at $LogoPath."
+}
+$IconPath = Join-Path $WorkDirectory "BaseSentinel.ico"
+$IconGenerator = "from PIL import Image; import sys; Image.open(sys.argv[1]).convert('RGBA').save(sys.argv[2], format='ICO', sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)])"
+& $Python -c $IconGenerator $LogoPath $IconPath
+if ($LASTEXITCODE -ne 0) { throw "Could not generate the BaseSentinel application icon." }
+Copy-Item $IconPath (Join-Path $OutputDirectory "BaseSentinel.ico") -Force
+
 $SpecDirectory = Join-Path $WorkDirectory "spec"
 New-Item -ItemType Directory -Path $SpecDirectory -Force | Out-Null
 
 Invoke-PyInstaller -Name "BaseSentinelAgent" -EntryPoint (Join-Path $RepositoryRoot "src\basesentinel_agent\cli.py")
 Invoke-PyInstaller -Name "BaseSentinelAgentWorker" -EntryPoint (Join-Path $PSScriptRoot "agent_worker.py")
-Invoke-PyInstaller -Name "BaseSentinelEndpoint" -EntryPoint (Join-Path $RepositoryRoot "src\basesentinel_agent\gui.py") -Windowed
+Invoke-PyInstaller -Name "BaseSentinelEndpoint" -EntryPoint (Join-Path $RepositoryRoot "src\basesentinel_agent\gui.py") -Windowed -ExtraArguments @("--icon", $IconPath, "--add-data", "$LogoPath;assets")
 Invoke-PyInstaller -Name "BaseSentinelTray" -EntryPoint (Join-Path $RepositoryRoot "src\basesentinel_agent\tray.py") -Windowed -ExtraArguments @("--collect-all", "pystray", "--collect-all", "PIL")
 
 $Iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
