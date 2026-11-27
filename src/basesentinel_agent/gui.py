@@ -79,6 +79,12 @@ COLORS = {
 
 
 class AgentWindow:
+    # After an approved Start/Stop request the window keeps polling until the
+    # collector really reaches the requested state ("running" or "stopped"),
+    # instead of trusting a single early status check.
+    expected_runtime: str | None = None
+    expected_runtime_deadline: float = 0.0
+
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("BaseSentinel | Endpoint")
@@ -1238,11 +1244,64 @@ class AgentWindow:
 
         self._update_actions()
 
+    def _expect_runtime(self, expected: str) -> None:
+        """Wait until the collector reaches "running" or "stopped"."""
+        self.expected_runtime = expected
+        self.expected_runtime_deadline = time.monotonic() + 60.0
+        self.status_detail.set(
+            "Waiting for the system-wide collector to start…"
+            if expected == "running"
+            else "Waiting for the system-wide collector to stop…"
+        )
+        self._update_actions()
+
+    def _check_runtime_expectation(self) -> None:
+        """Called after every runtime status check while a request is pending."""
+        expected = self.expected_runtime
+        if expected is None or self.closing:
+            return
+
+        want_running = expected == "running"
+        reached = (
+            self.runtime_state_checked
+            and not self.runtime_state_error
+            and self.background_running == want_running
+        )
+        if reached:
+            self.expected_runtime = None
+            self._append_activity(
+                "System-wide collector is running."
+                if want_running
+                else "System-wide collector stopped.",
+                "success",
+            )
+            self._update_actions()
+            return
+
+        if time.monotonic() >= self.expected_runtime_deadline:
+            self.expected_runtime = None
+            self._append_activity(
+                "The system-wide collector did not "
+                + ("start" if want_running else "stop")
+                + " within 60 seconds. Check the agent log.",
+                "error",
+            )
+            self._update_actions()
+            return
+
+        self.status_detail.set(
+            "Waiting for the system-wide collector to start…"
+            if want_running
+            else "Waiting for the system-wide collector to stop…"
+        )
+        self.root.after(1500, self._refresh_runtime_state)
+
     def _update_actions(self) -> None:
         idle_task = (
             self.process is None
             and not self.control_busy
             and not self.system_install_result_running
+            and self.expected_runtime is None
         )
         self.connect_button.configure(
             state=(
@@ -1656,6 +1715,7 @@ class AgentWindow:
 
             elif kind == "runtime_state":
                 self._apply_runtime_state(payload)
+                self._check_runtime_expectation()
 
             elif kind == "control_result":
                 action, code, output, error = payload
@@ -1667,6 +1727,7 @@ class AgentWindow:
                         "System-wide collector start was requested.",
                         "success",
                     )
+                    self._expect_runtime("running")
                 elif action == "restore" and code == 0:
                     self._append_activity(
                         "The previous per-user collector is running again.",
@@ -1708,7 +1769,11 @@ class AgentWindow:
                     if error:
                         self._append_activity(error, "error")
                 if action == "stop" and code == 0:
-                    self._append_activity("Background worker stopped cleanly.", "success")
+                    if self.system_wide_installed:
+                        # The elevated stop was only launched; wait for the real result.
+                        self._expect_runtime("stopped")
+                    else:
+                        self._append_activity("Background worker stopped cleanly.", "success")
                 elif code != 0:
                     messagebox.showerror(
                         "Background agent",

@@ -337,7 +337,7 @@ def _run_loop(args, stop_event: threading.Event, mode: str) -> int:
     except KeyboardInterrupt:
         pass
 
-    print("\\nBaseSentinel agent stopped.")
+    print("\nBaseSentinel agent stopped.")
     return 0
 
 
@@ -430,7 +430,9 @@ def stop_background(args) -> int:
                 run_elevated(_cli_command("startup-stop-admin"))
                 print("The elevated stop tool was launched. Approve the Windows UAC prompt to stop the collector.")
                 return 0
-            end_task(_STARTUP_TASK_NAME)
+            from basesentinel_agent.system_install import stop_system_worker
+
+            stop_system_worker()
             print("BaseSentinel system-wide collector stopped.")
             print("Automatic startup at the next Windows boot remains enabled.")
             return 0
@@ -527,6 +529,10 @@ def _finish_system_install(config: dict, args) -> int:
         print("The startup task is installed, but it could not be started immediately.")
         print(f"Details: {result['start_error']}")
         print("Windows will try again at the next boot.")
+
+    if result.get("task_visibility_warning"):
+        print(f"Task Scheduler visibility warning: {result['task_visibility_warning']}")
+        print("The collector status in the endpoint window may not update correctly.")
 
     for warning in result.get("audit_policy_warnings", []):
         print(f"Windows audit policy warning: {warning}")
@@ -806,7 +812,9 @@ def _stop_system_agent_admin() -> int:
         if not task_exists(_STARTUP_TASK_NAME):
             print("BaseSentinel automatic startup is not installed.")
             return 0
-        end_task(_STARTUP_TASK_NAME)
+        from basesentinel_agent.system_install import stop_system_worker
+
+        stop_system_worker()
     except RuntimeError as exc:
         print(f"Could not stop the system-wide BaseSentinel collector: {exc}")
         return 1

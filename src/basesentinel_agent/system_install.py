@@ -420,7 +420,7 @@ def install_system_agent(
 ) -> dict:
     """Install one protected LocalSystem collector for every Windows user."""
     from basesentinel_windows.startup import (
-        end_task,
+        allow_users_to_read_task,
         is_admin,
         register_system_boot_task,
         run_task,
@@ -464,7 +464,7 @@ def install_system_agent(
         if task_exists(_TASK_NAME):
             # Do not continue if Task Scheduler cannot stop the previous worker.
             # A running worker may keep an executable or DLL in Runtime locked.
-            end_task(_TASK_NAME)
+            stop_system_worker()
 
         if runtime_dir.exists():
             # Never delete a previous backup before the active Runtime has been
@@ -526,6 +526,14 @@ def install_system_agent(
     if backup is not None and backup.exists():
         shutil.rmtree(backup, ignore_errors=True)
 
+    # The endpoint GUI and tray are not elevated. Without read access to the
+    # SYSTEM task they cannot see that it exists and keep offering "Install".
+    task_visibility_warning = None
+    try:
+        allow_users_to_read_task(_TASK_NAME)
+    except RuntimeError as exc:
+        task_visibility_warning = str(exc)
+
     started = True
     start_error = None
     try:
@@ -540,19 +548,80 @@ def install_system_agent(
         "data_dir": str(data_dir),
         "started": started,
         "start_error": start_error,
+        "task_visibility_warning": task_visibility_warning,
         "audit_policy_warnings": audit_policy_warnings,
     }
 
 
+def stop_system_worker(
+    *,
+    graceful_timeout: float = 20.0,
+    kill_timeout: float = 10.0,
+) -> bool:
+    """Stop the system-wide collector and make sure no worker process survives.
+
+    The worker is a PyInstaller --onefile executable: a launcher plus the real
+    Python child. ``schtasks /End`` terminates only the launcher, so the child
+    would keep running, keep the single-instance lock and keep collecting events
+    while the UI reports the collector as stopped. Must run elevated.
+
+    Returns True if a worker was running when the call started.
+    """
+    from basesentinel_agent.background import background_status, request_background_stop
+    from basesentinel_windows.startup import (
+        end_task,
+        is_task_running,
+        task_exists,
+        terminate_process_tree,
+    )
+
+    data_dir = machine_data_dir()
+    was_running = False
+
+    # 1. Ask the worker to exit cleanly. It watches agent.stop in its data dir.
+    try:
+        was_running = request_background_stop(data_dir, timeout=graceful_timeout)
+    except TimeoutError:
+        was_running = True
+
+    # 2. Let Task Scheduler end the task if it still considers it running.
+    if task_exists(_TASK_NAME) and is_task_running(_TASK_NAME):
+        was_running = True
+        try:
+            end_task(_TASK_NAME)
+        except RuntimeError:
+            # The task may have finished on its own just after the graceful stop.
+            if is_task_running(_TASK_NAME):
+                raise
+
+    # 3. A surviving child still owns the worker lock: end its process tree.
+    state = background_status(data_dir)
+    if state["running"]:
+        was_running = True
+        pid = state["pid"]
+        if not pid:
+            raise RuntimeError(
+                "The collector is still running, but its process id is unknown."
+            )
+        terminate_process_tree(pid)
+        deadline = time.monotonic() + kill_timeout
+        while background_status(data_dir)["running"]:
+            if time.monotonic() >= deadline:
+                raise RuntimeError("The system-wide collector did not stop.")
+            time.sleep(0.2)
+
+    return was_running
+
+
 def remove_system_agent_startup() -> bool:
     """Stop and remove the system-wide startup task without deleting agent data."""
-    from basesentinel_windows.startup import end_task, remove_task, task_exists
+    from basesentinel_windows.startup import remove_task, task_exists
 
     if not task_exists(_TASK_NAME):
         return False
     try:
-        end_task(_TASK_NAME)
+        stop_system_worker()
     except RuntimeError:
-        # The task may be installed but not currently running.
+        # Best effort: remove the task even if the worker could not be stopped.
         pass
     return remove_task(_TASK_NAME)

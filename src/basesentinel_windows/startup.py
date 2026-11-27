@@ -409,6 +409,93 @@ def register_system_boot_task(
                 pass
 
 
+def allow_users_to_read_task(task_name: str) -> None:
+    """Let non-elevated users read a task that was registered by an administrator.
+
+    A task registered as SYSTEM gets a default security descriptor that only
+    allows Administrators and SYSTEM to read it. The endpoint GUI and tray run
+    without elevation, so ``schtasks /Query`` fails there with "Access is
+    denied" and the task is wrongly reported as not installed. Starting,
+    stopping and installing still go through UAC; this only grants read access
+    (definition and run state) to Authenticated Users.
+
+    Must be called from an elevated process.
+    """
+    _require_windows()
+    task_name_literal = task_name.replace("'", "''")
+    script = (
+        "$ErrorActionPreference = 'Stop'; "
+        "$service = New-Object -ComObject Schedule.Service; "
+        "$service.Connect(); "
+        f"$task = $service.GetFolder('\\').GetTask('{task_name_literal}'); "
+        # 4 = DACL_SECURITY_INFORMATION: read only the access-control list.
+        "$sddl = [string]$task.GetSecurityDescriptor(4); "
+        "if ($sddl -notmatch '\\(A;[A-Z]*;[A-Z]*;;;AU\\)') "
+        "{ $sddl = $sddl + '(A;;GR;;;AU)' } "
+        "$task.SetSecurityDescriptor($sddl, 0)"
+    )
+    powershell = windows_system_directory() / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    try:
+        result = subprocess.run(
+            [
+                str(powershell),
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                script,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            # PowerShell cold start can be slow right after installation.
+            timeout=30,
+            **_hidden_subprocess_kwargs(),
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("Setting Task Scheduler read access timed out.") from exc
+    except OSError as exc:
+        raise RuntimeError(f"Could not set Task Scheduler read access: {exc}") from exc
+
+    if result.returncode != 0:
+        details = (result.stderr or result.stdout).strip()[-500:]
+        raise RuntimeError(
+            "Could not allow standard users to read the Task Scheduler task."
+            + (f" Details: {details}" if details else "")
+        )
+
+
+def terminate_process_tree(pid: int) -> None:
+    """Forcefully end a process and everything it started (taskkill /T /F).
+
+    Used as the last resort when a worker survives ``schtasks /End``. Must be
+    called from an elevated process to end a SYSTEM process.
+    """
+    _require_windows()
+    if not isinstance(pid, int) or pid <= 0:
+        raise ValueError("A positive process id is required.")
+    try:
+        result = subprocess.run(
+            [windows_system_executable("taskkill.exe"), "/PID", str(pid), "/T", "/F"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=15,
+            **_hidden_subprocess_kwargs(),
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("Ending the collector process timed out.") from exc
+    except OSError as exc:
+        raise RuntimeError(f"Could not run taskkill: {exc}") from exc
+
+    # 128 means the process had already exited, which is the outcome we want.
+    if result.returncode not in (0, 128):
+        details = (result.stderr or result.stdout).strip()[-500:]
+        raise RuntimeError(
+            f"Could not end process {pid}."
+            + (f" Details: {details}" if details else "")
+        )
+
+
 def is_admin() -> bool:
     """Return whether the current Windows process has an elevated administrator token."""
     if os.name != "nt":
