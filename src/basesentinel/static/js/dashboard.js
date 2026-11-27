@@ -129,7 +129,7 @@ async function apiRequest(path, options = {}) {
 
     if (response.status === 401) {
         clearSession();
-        if (window.location.pathname !== "/login") window.location.replace("/login");
+        if (window.location.pathname !== "/app/login") window.location.replace("/app/login");
     }
 
     if (!response.ok) {
@@ -159,7 +159,7 @@ async function initializeLogin() {
     const button = document.getElementById("login-button");
 
     if (getToken()) {
-        window.location.replace("/");
+        window.location.replace("/app/");
         return;
     }
 
@@ -184,7 +184,7 @@ async function initializeLogin() {
             if (!response.ok) throw new Error(data?.error?.message || "Sign-in failed.");
 
             setSession(data.token, data.user);
-            window.location.replace("/");
+            window.location.replace("/app/");
         } catch (exception) {
             error.textContent = exception.message || "Unable to sign in.";
             button.disabled = false;
@@ -197,7 +197,7 @@ async function initializeDashboard() {
     state.token = getToken();
 
     if (!state.token) {
-        window.location.replace("/login");
+        window.location.replace("/app/login");
         return;
     }
 
@@ -259,7 +259,7 @@ async function logout() {
     }
 
     clearSession();
-    window.location.replace("/login");
+    window.location.replace("/app/login");
 }
 
 async function loadDashboard() {
