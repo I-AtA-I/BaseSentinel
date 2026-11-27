@@ -271,11 +271,11 @@ class AgentWindow:
         brand = tk.Frame(bar, bg=COLORS["sidebar"])
         brand.pack(side="left", fill="y", padx=(14, 0))
         logo = self._load_logo(24)
+        logo_label = None
         if logo is not None:
             self.title_logo = logo
-            tk.Label(brand, image=logo, bg=COLORS["sidebar"]).pack(
-                side="left", padx=(0, 9), pady=8
-            )
+            logo_label = tk.Label(brand, image=logo, bg=COLORS["sidebar"])
+            logo_label.pack(side="left", padx=(0, 9), pady=8)
         title = tk.Label(
             brand,
             text="BaseSentinel",
@@ -305,7 +305,10 @@ class AgentWindow:
         )
         self._title_bar_button(bar, "—", self.root.iconify)
 
-        for widget in (bar, brand, title, subtitle):
+        drag_widgets = [bar, brand, title, subtitle]
+        if logo_label is not None:
+            drag_widgets.append(logo_label)
+        for widget in drag_widgets:
             widget.bind("<ButtonPress-1>", self._start_window_drag)
             widget.bind("<B1-Motion>", self._move_window)
             widget.bind("<ButtonRelease-1>", self._stop_window_drag)
@@ -329,7 +332,11 @@ class AgentWindow:
             cursor="hand2",
         )
         button.pack(side="right", fill="y")
-        button.bind("<Button-1>", lambda _event: command())
+        def invoke(_event):
+            command()
+            return "break"
+
+        button.bind("<Button-1>", invoke)
         button.bind(
             "<Enter>",
             lambda _event: button.configure(
