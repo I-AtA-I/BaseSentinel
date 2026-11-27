@@ -344,6 +344,7 @@ def test_collection_pipeline_keeps_events_queued_when_stop_is_requested(
         "collect_security_events",
         lambda checkpoint: ([event], 300),
     )
+    monkeypatch.setattr(cli, "collect_defender_events", lambda _checkpoint: ([], 0))
 
     result = cli._collect_and_send(
         FakeClient(),

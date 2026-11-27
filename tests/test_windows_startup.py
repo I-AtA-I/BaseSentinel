@@ -114,9 +114,10 @@ def test_logon_task_query_and_remove(monkeypatch):
 
     assert startup.task_exists("BaseSentinel Agent") is True
     assert startup.remove_task("BaseSentinel Agent") is True
-    assert calls[0][:4] == ["schtasks.exe", "/Query", "/TN", "BaseSentinel Agent"]
-    assert calls[1][:4] == ["schtasks.exe", "/Query", "/TN", "BaseSentinel Agent"]
-    assert calls[2][:4] == ["schtasks.exe", "/Delete", "/TN", "BaseSentinel Agent"]
+    schtasks = startup.windows_system_executable("schtasks.exe")
+    assert calls[0][:4] == [schtasks, "/Query", "/TN", "BaseSentinel Agent"]
+    assert calls[1][:4] == [schtasks, "/Query", "/TN", "BaseSentinel Agent"]
+    assert calls[2][:4] == [schtasks, "/Delete", "/TN", "BaseSentinel Agent"]
 
 
 
