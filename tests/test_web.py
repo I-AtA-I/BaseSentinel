@@ -175,7 +175,7 @@ def test_security_event_detail_javascript_is_available(client):
     assert b"initializeEventDetail" in response.data
 
 def test_shared_navigation_is_consistent_across_workspace_pages(client):
-    pages = ["/", "/events", "/alerts", "/agents", "/settings/enrollment"]
+    pages = ["/app/", "/app/events", "/app/alerts", "/app/agents", "/app/settings/enrollment"]
     expected_links = [
         b'href="/app/"',
         b'href="/app/events"',
@@ -281,7 +281,7 @@ def test_security_reports_javascript_is_available(client):
 
 
 def test_alert_detail_includes_investigation_timeline(client):
-    response = client.get("/alerts/12345678-1234-1234-1234-123456789abc")
+    response = client.get("/app/alerts/12345678-1234-1234-1234-123456789abc")
     assert response.status_code == 200
     assert b"Investigation timeline" in response.data
     javascript = client.get("/app/static/js/alert-detail.js")
