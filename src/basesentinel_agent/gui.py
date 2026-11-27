@@ -101,9 +101,6 @@ class AgentWindow:
         self.root.geometry("1180x820")
         self.root.minsize(1000, 720)
         self.root.configure(background=COLORS["background"])
-        self._window_handle = None
-        self._drag_position = None
-
         self.messages = thread_queue.Queue()
         self.process: subprocess.Popen | None = None
         self.process_task: str | None = None
@@ -170,170 +167,49 @@ class AgentWindow:
     def _apply_windows_chrome(self) -> None:
         if os.name != "nt":
             return
+
         try:
             user32 = ctypes.WinDLL("user32", use_last_error=True)
-            hwnd = ctypes.c_void_p(self.root.winfo_id())
             get_parent = user32.GetParent
             get_parent.argtypes = [ctypes.c_void_p]
             get_parent.restype = ctypes.c_void_p
-            self._window_handle = get_parent(hwnd) or hwnd.value
 
-            get_style = getattr(user32, "GetWindowLongPtrW", user32.GetWindowLongW)
-            set_style = getattr(user32, "SetWindowLongPtrW", user32.SetWindowLongW)
-            get_style.argtypes = [ctypes.c_void_p, ctypes.c_int]
-            get_style.restype = ctypes.c_ssize_t
-            set_style.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_ssize_t]
-            set_style.restype = ctypes.c_ssize_t
-            style = get_style(self._window_handle, -16)
-            style &= ~0x00C00000  # Remove the standard caption.
-            style |= 0x00040000 | 0x00080000 | 0x00020000 | 0x00010000
-            set_style(self._window_handle, -16, style)
+            client_handle = ctypes.c_void_p(self.root.winfo_id())
+            window_handle = get_parent(client_handle) or client_handle
 
-            set_window_pos = user32.SetWindowPos
-            set_window_pos.argtypes = [
+            dwmapi = ctypes.WinDLL("dwmapi", use_last_error=True)
+            set_attribute = dwmapi.DwmSetWindowAttribute
+            set_attribute.argtypes = [
                 ctypes.c_void_p,
+                ctypes.c_uint,
                 ctypes.c_void_p,
-                ctypes.c_int,
-                ctypes.c_int,
-                ctypes.c_int,
-                ctypes.c_int,
                 ctypes.c_uint,
             ]
-            set_window_pos.restype = ctypes.c_int
-            set_window_pos(
-                self._window_handle,
-                None,
-                0,
-                0,
-                0,
-                0,
-                0x0001 | 0x0002 | 0x0004 | 0x0020,
+            set_attribute.restype = ctypes.c_long
+
+            dark_mode = ctypes.c_int(1)
+            result = set_attribute(
+                window_handle,
+                20,
+                ctypes.byref(dark_mode),
+                ctypes.sizeof(dark_mode),
             )
-        except Exception as exc:
-            _write_endpoint_diagnostic(f"Could not apply custom Windows title bar: {exc}")
-
-    def _start_window_drag(self, event) -> None:
-        # Keep dragging inside Tk's event loop. A synchronous WM_NCLBUTTONDOWN
-        # SendMessage call can block the GUI callback while Windows tracks the drag.
-        if self.root.state() == "zoomed":
-            return
-        self._drag_position = (
-            event.x_root - self.root.winfo_x(),
-            event.y_root - self.root.winfo_y(),
-        )
-
-    def _stop_window_drag(self, _event) -> None:
-        self._drag_position = None
-
-    def _move_window(self, event) -> None:
-        if self._drag_position is None:
-            return
-        x = event.x_root - self._drag_position[0]
-        y = event.y_root - self._drag_position[1]
-        self.root.geometry(f"+{x}+{y}")
-
-    def _toggle_maximize(self) -> None:
-        if self.root.state() == "zoomed":
-            self.root.state("normal")
-            self.maximize_button.configure(text="□")
-        else:
-            self.root.state("zoomed")
-            self.maximize_button.configure(text="❐")
-
-    def _build_title_bar(self) -> None:
-        bar = tk.Frame(
-            self.root,
-            bg=COLORS["sidebar"],
-            height=42,
-            highlightthickness=1,
-            highlightbackground=COLORS["border"],
-            highlightcolor=COLORS["border"],
-        )
-        bar.pack(fill="x", side="top")
-        bar.pack_propagate(False)
-
-        brand = tk.Frame(bar, bg=COLORS["sidebar"])
-        brand.pack(side="left", fill="y", padx=(14, 0))
-        logo = self._load_logo(24)
-        logo_label = None
-        if logo is not None:
-            self.title_logo = logo
-            logo_label = tk.Label(brand, image=logo, bg=COLORS["sidebar"])
-            logo_label.pack(side="left", padx=(0, 9), pady=8)
-        title = tk.Label(
-            brand,
-            text="BaseSentinel",
-            bg=COLORS["sidebar"],
-            fg=COLORS["text"],
-            font=("Segoe UI Semibold", 9),
-        )
-        title.pack(side="left")
-        subtitle = tk.Label(
-            brand,
-            text="  /  ENDPOINT",
-            bg=COLORS["sidebar"],
-            fg=COLORS["muted"],
-            font=("Segoe UI", 8),
-        )
-        subtitle.pack(side="left")
-
-        self._title_bar_button(
-            bar,
-            "×",
-            self.close,
-            hover_background=COLORS["danger"],
-            hover_foreground="#ffffff",
-        )
-        self.maximize_button = self._title_bar_button(
-            bar, "□", self._toggle_maximize
-        )
-        self._title_bar_button(bar, "—", self.root.iconify)
-
-        drag_widgets = [bar, brand, title, subtitle]
-        if logo_label is not None:
-            drag_widgets.append(logo_label)
-        for widget in drag_widgets:
-            widget.bind("<ButtonPress-1>", self._start_window_drag)
-            widget.bind("<B1-Motion>", self._move_window)
-            widget.bind("<ButtonRelease-1>", self._stop_window_drag)
-            widget.bind("<Double-Button-1>", lambda _event: self._toggle_maximize())
-
-    def _title_bar_button(
-        self,
-        parent,
-        text: str,
-        command,
-        hover_background: str = COLORS["panel_alt"],
-        hover_foreground: str = COLORS["text"],
-    ):
-        button = tk.Label(
-            parent,
-            text=text,
-            width=5,
-            bg=COLORS["sidebar"],
-            fg=COLORS["muted"],
-            font=("Segoe UI", 11),
-            cursor="hand2",
-        )
-        button.pack(side="right", fill="y")
-        def invoke(_event):
-            command()
-            return "break"
-
-        button.bind("<Button-1>", invoke)
-        button.bind(
-            "<Enter>",
-            lambda _event: button.configure(
-                bg=hover_background, fg=hover_foreground
-            ),
-        )
-        button.bind(
-            "<Leave>",
-            lambda _event: button.configure(
-                bg=COLORS["sidebar"], fg=COLORS["muted"]
-            ),
-        )
-        return button
+            if result != 0:
+                # Older Windows 10 builds used attribute 19.
+                result = set_attribute(
+                    window_handle,
+                    19,
+                    ctypes.byref(dark_mode),
+                    ctypes.sizeof(dark_mode),
+                )
+            if result != 0:
+                _write_endpoint_diagnostic(
+                    f"Could not enable the dark native title bar (HRESULT: 0x{result & 0xFFFFFFFF:08X})."
+                )
+        except (AttributeError, OSError, TypeError, ValueError) as exc:
+            _write_endpoint_diagnostic(
+                f"Could not configure the native Windows title bar: {exc}"
+            )
 
     def _configure_styles(self) -> None:
         style = ttk.Style(self.root)
@@ -477,7 +353,6 @@ class AgentWindow:
         )
 
     def _build_interface(self) -> None:
-        self._build_title_bar()
         shell = tk.Frame(self.root, bg=COLORS["background"])
         shell.pack(fill="both", expand=True)
 
