@@ -171,18 +171,36 @@ class AgentWindow:
         if os.name != "nt":
             return
         try:
-            user32 = ctypes.windll.user32
-            hwnd = self.root.winfo_id()
-            parent = user32.GetParent(hwnd)
-            self._window_handle = parent or hwnd
+            user32 = ctypes.WinDLL("user32", use_last_error=True)
+            hwnd = ctypes.c_void_p(self.root.winfo_id())
+            get_parent = user32.GetParent
+            get_parent.argtypes = [ctypes.c_void_p]
+            get_parent.restype = ctypes.c_void_p
+            self._window_handle = get_parent(hwnd) or hwnd.value
 
             get_style = getattr(user32, "GetWindowLongPtrW", user32.GetWindowLongW)
             set_style = getattr(user32, "SetWindowLongPtrW", user32.SetWindowLongW)
+            get_style.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            get_style.restype = ctypes.c_ssize_t
+            set_style.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_ssize_t]
+            set_style.restype = ctypes.c_ssize_t
             style = get_style(self._window_handle, -16)
             style &= ~0x00C00000  # Remove the standard caption.
             style |= 0x00040000 | 0x00080000 | 0x00020000 | 0x00010000
             set_style(self._window_handle, -16, style)
-            user32.SetWindowPos(
+
+            set_window_pos = user32.SetWindowPos
+            set_window_pos.argtypes = [
+                ctypes.c_void_p,
+                ctypes.c_void_p,
+                ctypes.c_int,
+                ctypes.c_int,
+                ctypes.c_int,
+                ctypes.c_int,
+                ctypes.c_uint,
+            ]
+            set_window_pos.restype = ctypes.c_int
+            set_window_pos(
                 self._window_handle,
                 None,
                 0,
@@ -196,9 +214,24 @@ class AgentWindow:
 
     def _start_window_drag(self, event) -> None:
         if os.name == "nt" and self._window_handle:
-            user32 = ctypes.windll.user32
-            user32.ReleaseCapture()
-            user32.SendMessageW(self._window_handle, 0x00A1, 2, 0)
+            user32 = ctypes.WinDLL("user32", use_last_error=True)
+            release_capture = user32.ReleaseCapture
+            release_capture.restype = ctypes.c_int
+            send_message = user32.SendMessageW
+            send_message.argtypes = [
+                ctypes.c_void_p,
+                ctypes.c_uint,
+                ctypes.c_void_p,
+                ctypes.c_void_p,
+            ]
+            send_message.restype = ctypes.c_ssize_t
+            release_capture()
+            send_message(
+                self._window_handle,
+                0x00A1,
+                ctypes.c_void_p(2),
+                ctypes.c_void_p(0),
+            )
             return
         self._drag_position = (
             event.x_root - self.root.winfo_x(),
