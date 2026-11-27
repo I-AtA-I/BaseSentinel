@@ -295,3 +295,11 @@ def test_system_task_running_state_uses_task_scheduler_api(
     )
     assert captured["arguments"][-2] == "-Command"
     assert "GetFolder(" + chr(39) + chr(92) + chr(39) + ")" in captured["arguments"][-1]
+
+
+def test_windows_task_scheduler_subprocesses_do_not_create_console_windows(monkeypatch):
+    monkeypatch.setattr(startup.os, "name", "nt")
+
+    assert startup._hidden_subprocess_kwargs() == {
+        "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+    }
