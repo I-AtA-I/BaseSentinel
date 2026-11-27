@@ -12,6 +12,13 @@ _NAMESPACE = "http://schemas.microsoft.com/windows/2004/02/mit/task"
 ET.register_namespace("", _NAMESPACE)
 
 
+def _hidden_subprocess_kwargs() -> dict[str, int]:
+    """Prevent Task Scheduler helper processes from opening console windows."""
+    if os.name != "nt":
+        return {}
+    return {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)}
+
+
 def _tag(name: str) -> str:
     return f"{{{_NAMESPACE}}}{name}"
 
@@ -130,6 +137,7 @@ def _run_schtasks(arguments: list[str]) -> subprocess.CompletedProcess[str]:
             text=True,
             check=False,
             timeout=5,
+            **_hidden_subprocess_kwargs(),
         )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError("Windows Task Scheduler did not respond within 5 seconds.") from exc
@@ -199,6 +207,7 @@ def task_exists(task_name: str) -> bool:
             text=True,
             check=False,
             timeout=5,
+            **_hidden_subprocess_kwargs(),
         )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError("Windows Task Scheduler did not respond within 5 seconds.") from exc
@@ -231,6 +240,7 @@ def is_task_running(task_name: str) -> bool:
             text=True,
             check=False,
             timeout=5,
+            **_hidden_subprocess_kwargs(),
         )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError("Windows Task Scheduler status check timed out.") from exc
@@ -490,6 +500,7 @@ def is_system_boot_task(task_name: str) -> bool:
             text=True,
             check=False,
             timeout=5,
+            **_hidden_subprocess_kwargs(),
         )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError("Windows Task Scheduler identity check timed out.") from exc
