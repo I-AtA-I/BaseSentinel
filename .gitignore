@@ -11,3 +11,6 @@ instance/
 .gitconfig
 
 src/basesentinel.egg-info/
+
+build/
+dist/

@@ -80,6 +80,7 @@ def test_collection_pipeline_queues_sends_and_acknowledges(monkeypatch, tmp_path
         "collect_security_events",
         lambda checkpoint: ([payload], 1234),
     )
+    monkeypatch.setattr(cli, "collect_defender_events", lambda _checkpoint: ([], 0))
 
     result = cli._collect_and_send(FakeClient(), queue, batch_size=50)
 
@@ -137,6 +138,7 @@ def test_failed_delivery_stays_in_local_queue(monkeypatch, tmp_path, capsys):
         "collect_security_events",
         lambda checkpoint: ([payload], 2345),
     )
+    monkeypatch.setattr(cli, "collect_defender_events", lambda _checkpoint: ([], 0))
 
     result = cli._collect_and_send(UnavailableClient(), queue, batch_size=50)
 
